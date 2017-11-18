@@ -77,7 +77,7 @@ Then define an array of routes with a single `route` to that component.
 </code-example>
 
 Once you've finished setting up, the router will match that URL to `path: 'heroes'` 
-and display the `HeroesComponent`, .
+and display the `HeroesComponent`.
 
 ### _RouterModule.forRoot()_
 
@@ -252,7 +252,7 @@ route to the `AppRoutingModule.Routes` array.
 
 This route redirects a URL that fully matches the empty path to the route whose path is `'/dashboard'`.
 
-After the browser refreshes, the router loads the `DashboardComponent
+After the browser refreshes, the router loads the `DashboardComponent`
 and the browser address bar shows the `/dashboard` URL.
 
 ### Add dashboard link to the shell
@@ -600,7 +600,7 @@ Here are the code files discussed on this page and your app should look like thi
 ## Summary
 
 * You added the Angular router to navigate among different components.
-* You turned the `AppComponent` into a navigation shell with a links and a `<router-outlet>`.
+* You turned the `AppComponent` into a navigation shell with `<a>` links and a `<router-outlet>`.
 * You configured the router in an `AppRoutingModule` 
 * You defined simple routes, a redirect route, and a parameterized route.
 * You used the `routerLink` directive in anchor elements.
