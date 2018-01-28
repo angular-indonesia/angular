@@ -6,8 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import {QUERY_READ_CONTAINER_REF, QUERY_READ_ELEMENT_REF, QUERY_READ_FROM_NODE, QUERY_READ_TEMPLATE_REF} from '../../src/render3/di';
-import {C, E, Q, QueryList, e, m, qR} from '../../src/render3/index';
-import {QueryReadType} from '../../src/render3/interfaces/query';
+import {C, E, Q, QueryList, V, cR, cr, detectChanges, e, m, qR, v} from '../../src/render3/index';
 
 import {createComponent, createDirective, renderComponent} from './render_util';
 
@@ -162,7 +161,7 @@ describe('query', () => {
 
   describe('local names predicate', () => {
 
-    it('should query for a single element and read ElementRef', () => {
+    it('should query for a single element and read ElementRef by default', () => {
 
       let elToQuery;
       /**
@@ -175,7 +174,7 @@ describe('query', () => {
       const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
         let tmp: any;
         if (cm) {
-          m(0, Q(['foo'], false, QUERY_READ_ELEMENT_REF));
+          m(0, Q(['foo'], false, QUERY_READ_FROM_NODE));
           elToQuery = E(1, 'div', null, null, ['foo', '']);
           e();
           E(2, 'div');
@@ -190,7 +189,7 @@ describe('query', () => {
       expect(query.first.nativeElement).toEqual(elToQuery);
     });
 
-    it('should query for multiple elements and read ElementRef', () => {
+    it('should query for multiple elements and read ElementRef by default', () => {
 
       let el1ToQuery;
       let el2ToQuery;
@@ -205,7 +204,7 @@ describe('query', () => {
       const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
         let tmp: any;
         if (cm) {
-          m(0, Q(['foo', 'bar'], undefined, QUERY_READ_ELEMENT_REF));
+          m(0, Q(['foo', 'bar'], undefined, QUERY_READ_FROM_NODE));
           el1ToQuery = E(1, 'div', null, null, ['foo', '']);
           e();
           E(2, 'div');
@@ -297,7 +296,7 @@ describe('query', () => {
       expect(isViewContainerRef(query.first)).toBeTruthy();
     });
 
-    it('should read ElementRef with a native element pointing to comment DOM node from containers',
+    it('should no longer read ElementRef with a native element pointing to comment DOM node from containers',
        () => {
          /**
           * <ng-template #foo></ng-template>
@@ -317,8 +316,7 @@ describe('query', () => {
          const cmptInstance = renderComponent(Cmpt);
          const query = (cmptInstance.query as QueryList<any>);
          expect(query.length).toBe(1);
-         expect(isElementRef(query.first)).toBeTruthy();
-         expect(query.first.nativeElement.nodeType).toBe(8);  // Node.COMMENT_NODE = 8
+         expect(query.first.nativeElement).toBe(null);
        });
 
     it('should read TemplateRef from container nodes by default', () => {
@@ -332,7 +330,7 @@ describe('query', () => {
       const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
         let tmp: any;
         if (cm) {
-          m(0, Q(['foo'], undefined, QUERY_READ_TEMPLATE_REF));
+          m(0, Q(['foo'], undefined, QUERY_READ_FROM_NODE));
           C(1, undefined, undefined, undefined, undefined, ['foo', '']);
         }
         qR(tmp = m<QueryList<any>>(0)) && (ctx.query = tmp as QueryList<any>);
@@ -380,7 +378,7 @@ describe('query', () => {
       const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
         let tmp: any;
         if (cm) {
-          m(0, Q(['foo']));
+          m(0, Q(['foo'], true, QUERY_READ_FROM_NODE));
           E(1, Child, null, null, ['foo', '']);
           { childInstance = m(2); }
           e();
@@ -408,7 +406,7 @@ describe('query', () => {
          const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
            let tmp: any;
            if (cm) {
-             m(0, Q(['foo']));
+             m(0, Q(['foo'], true, QUERY_READ_FROM_NODE));
              E(1, 'div', null, [Child], ['foo', 'child']);
              childInstance = m(2);
              e();
@@ -436,7 +434,7 @@ describe('query', () => {
       const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
         let tmp: any;
         if (cm) {
-          m(0, Q(['foo', 'bar']));
+          m(0, Q(['foo', 'bar'], true, QUERY_READ_FROM_NODE));
           E(1, 'div', null, [Child1, Child2], ['foo', 'child1', 'bar', 'child2']);
           {
             child1Instance = m(2);
@@ -511,7 +509,6 @@ describe('query', () => {
     it('should not add results to query if a requested token cant be read', () => {
       const Child = createDirective();
 
-      let childInstance, div;
       /**
        * <div #foo></div>
        * class Cmpt {
@@ -522,7 +519,7 @@ describe('query', () => {
         let tmp: any;
         if (cm) {
           m(0, Q(['foo'], false, Child));
-          div = E(1, 'div', null, null, ['foo', '']);
+          E(1, 'div', null, null, ['foo', '']);
           e();
         }
         qR(tmp = m<QueryList<any>>(0)) && (ctx.query = tmp as QueryList<any>);
@@ -531,6 +528,301 @@ describe('query', () => {
       const cmptInstance = renderComponent(Cmpt);
       const query = (cmptInstance.query as QueryList<any>);
       expect(query.length).toBe(0);
+    });
+
+  });
+
+  describe('view boundaries', () => {
+
+    it('should report results in embedded views', () => {
+      let firstEl;
+      /**
+       * <ng-template [ngIf]="exp">
+       *    <div #foo></div>
+       * </ng-template>
+       * class Cmpt {
+       *  @ViewChildren('foo') query;
+       * }
+       */
+      const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
+        let tmp: any;
+        if (cm) {
+          m(0, Q(['foo'], true, QUERY_READ_FROM_NODE));
+          C(1);
+        }
+        cR(1);
+        {
+          if (ctx.exp) {
+            let cm1 = V(1);
+            {
+              if (cm1) {
+                firstEl = E(0, 'div', null, null, ['foo', '']);
+                e();
+              }
+            }
+            v();
+          }
+        }
+        cr();
+        qR(tmp = m<QueryList<any>>(0)) && (ctx.query = tmp as QueryList<any>);
+      });
+
+      const cmptInstance = renderComponent(Cmpt);
+      const query = (cmptInstance.query as any);
+      expect(query.length).toBe(0);
+
+      cmptInstance.exp = true;
+      detectChanges(cmptInstance);
+      expect(query.length).toBe(1);
+      expect(query.first.nativeElement).toBe(firstEl);
+
+      cmptInstance.exp = false;
+      detectChanges(cmptInstance);
+      expect(query.length).toBe(0);
+    });
+
+    it('should add results from embedded views in the correct order - views and elements mix',
+       () => {
+         let firstEl, lastEl, viewEl;
+         /**
+          * <span #foo></span>
+          * <ng-template [ngIf]="exp">
+          *    <div #foo></div>
+          * </ng-template>
+          * <span #foo></span>
+          * class Cmpt {
+          *  @ViewChildren('foo') query;
+          * }
+          */
+         const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
+           let tmp: any;
+           if (cm) {
+             m(0, Q(['foo'], true, QUERY_READ_FROM_NODE));
+             firstEl = E(1, 'b', null, null, ['foo', '']);
+             e();
+             C(2);
+             lastEl = E(3, 'i', null, null, ['foo', '']);
+             e();
+           }
+           cR(2);
+           {
+             if (ctx.exp) {
+               let cm1 = V(1);
+               {
+                 if (cm1) {
+                   viewEl = E(0, 'div', null, null, ['foo', '']);
+                   e();
+                 }
+               }
+               v();
+             }
+           }
+           cr();
+           qR(tmp = m<QueryList<any>>(0)) && (ctx.query = tmp as QueryList<any>);
+         });
+
+         const cmptInstance = renderComponent(Cmpt);
+         const query = (cmptInstance.query as any);
+         expect(query.length).toBe(2);
+         expect(query.first.nativeElement).toBe(firstEl);
+         expect(query.last.nativeElement).toBe(lastEl);
+
+         cmptInstance.exp = true;
+         detectChanges(cmptInstance);
+         expect(query.length).toBe(3);
+         expect(query.toArray()[0].nativeElement).toBe(firstEl);
+         expect(query.toArray()[1].nativeElement).toBe(viewEl);
+         expect(query.toArray()[2].nativeElement).toBe(lastEl);
+
+         cmptInstance.exp = false;
+         detectChanges(cmptInstance);
+         expect(query.length).toBe(2);
+         expect(query.first.nativeElement).toBe(firstEl);
+         expect(query.last.nativeElement).toBe(lastEl);
+       });
+
+    it('should add results from embedded views in the correct order - views side by side', () => {
+      let firstEl, lastEl;
+      /**
+       * <ng-template [ngIf]="exp1">
+       *    <div #foo></div>
+       * </ng-template>
+       * <ng-template [ngIf]="exp2">
+       *    <span #foo></span>
+       * </ng-template>
+       * class Cmpt {
+       *  @ViewChildren('foo') query;
+       * }
+       */
+      const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
+        let tmp: any;
+        if (cm) {
+          m(0, Q(['foo'], true, QUERY_READ_FROM_NODE));
+          C(1);
+        }
+        cR(1);
+        {
+          if (ctx.exp1) {
+            let cm1 = V(0);
+            {
+              if (cm1) {
+                firstEl = E(0, 'div', null, null, ['foo', '']);
+                e();
+              }
+            }
+            v();
+          }
+          if (ctx.exp2) {
+            let cm1 = V(1);
+            {
+              if (cm1) {
+                lastEl = E(0, 'span', null, null, ['foo', '']);
+                e();
+              }
+            }
+            v();
+          }
+        }
+        cr();
+        qR(tmp = m<QueryList<any>>(0)) && (ctx.query = tmp as QueryList<any>);
+      });
+
+      const cmptInstance = renderComponent(Cmpt);
+      const query = (cmptInstance.query as any);
+      expect(query.length).toBe(0);
+
+      cmptInstance.exp2 = true;
+      detectChanges(cmptInstance);
+      expect(query.length).toBe(1);
+      expect(query.last.nativeElement).toBe(lastEl);
+
+      cmptInstance.exp1 = true;
+      detectChanges(cmptInstance);
+      expect(query.length).toBe(2);
+      expect(query.first.nativeElement).toBe(firstEl);
+      expect(query.last.nativeElement).toBe(lastEl);
+    });
+
+    it('should add results from embedded views in the correct order - nested views', () => {
+      let firstEl, lastEl;
+      /**
+       * <ng-template [ngIf]="exp1">
+       *    <div #foo></div>
+       *    <ng-template [ngIf]="exp2">
+       *      <span #foo></span>
+       *    </ng-template>
+       * </ng-template>
+       * class Cmpt {
+       *  @ViewChildren('foo') query;
+       * }
+       */
+      const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
+        let tmp: any;
+        if (cm) {
+          m(0, Q(['foo'], true, QUERY_READ_FROM_NODE));
+          C(1);
+        }
+        cR(1);
+        {
+          if (ctx.exp1) {
+            let cm1 = V(0);
+            {
+              if (cm1) {
+                firstEl = E(0, 'div', null, null, ['foo', '']);
+                e();
+                C(1);
+              }
+              cR(1);
+              {
+                if (ctx.exp2) {
+                  let cm2 = V(0);
+                  {
+                    if (cm2) {
+                      lastEl = E(0, 'span', null, null, ['foo', '']);
+                      e();
+                    }
+                  }
+                  v();
+                }
+              }
+              cr();
+            }
+            v();
+          }
+        }
+        cr();
+        qR(tmp = m<QueryList<any>>(0)) && (ctx.query = tmp as QueryList<any>);
+      });
+
+      const cmptInstance = renderComponent(Cmpt);
+      const query = (cmptInstance.query as any);
+      expect(query.length).toBe(0);
+
+      cmptInstance.exp1 = true;
+      detectChanges(cmptInstance);
+      expect(query.length).toBe(1);
+      expect(query.first.nativeElement).toBe(firstEl);
+
+      cmptInstance.exp2 = true;
+      detectChanges(cmptInstance);
+      expect(query.length).toBe(2);
+      expect(query.first.nativeElement).toBe(firstEl);
+      expect(query.last.nativeElement).toBe(lastEl);
+    });
+
+    it('should support combination of deep and shallow queries', () => {
+      /**
+       * <ng-template [ngIf]="exp">
+       *    <div #foo></div>
+       * </ng-template>
+       * <span #foo></span>
+       * class Cmpt {
+       *  @ViewChildren('foo') query;
+       * }
+       */
+      const Cmpt = createComponent('cmpt', function(ctx: any, cm: boolean) {
+        let tmp: any;
+        if (cm) {
+          m(0, Q(['foo'], true, QUERY_READ_FROM_NODE));
+          m(1, Q(['foo'], false, QUERY_READ_FROM_NODE));
+          C(2);
+          E(3, 'span', null, null, ['foo', '']);
+          e();
+        }
+        cR(2);
+        {
+          if (ctx.exp) {
+            let cm1 = V(0);
+            {
+              if (cm1) {
+                E(0, 'div', null, null, ['foo', '']);
+                e();
+              }
+            }
+            v();
+          }
+        }
+        cr();
+        qR(tmp = m<QueryList<any>>(0)) && (ctx.deep = tmp as QueryList<any>);
+        qR(tmp = m<QueryList<any>>(1)) && (ctx.shallow = tmp as QueryList<any>);
+      });
+
+      const cmptInstance = renderComponent(Cmpt);
+      const deep = (cmptInstance.deep as any);
+      const shallow = (cmptInstance.shallow as any);
+      expect(deep.length).toBe(1);
+      expect(shallow.length).toBe(1);
+
+
+      cmptInstance.exp = true;
+      detectChanges(cmptInstance);
+      expect(deep.length).toBe(2);
+      expect(shallow.length).toBe(1);
+
+      cmptInstance.exp = false;
+      detectChanges(cmptInstance);
+      expect(deep.length).toBe(1);
+      expect(shallow.length).toBe(1);
     });
 
   });

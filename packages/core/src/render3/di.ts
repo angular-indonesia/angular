@@ -19,7 +19,7 @@ import {Type} from '../type';
 
 import {assertLessThan} from './assert';
 import {assertPreviousIsParent, getPreviousOrParentNode, getRenderer, renderEmbeddedTemplate} from './instructions';
-import {ComponentTemplate, DirectiveDef, TypedDirectiveDef} from './interfaces/definition';
+import {ComponentTemplate, DirectiveDef} from './interfaces/definition';
 import {LInjector} from './interfaces/injector';
 import {LContainerNode, LElementNode, LNode, LNodeFlags, LViewNode} from './interfaces/node';
 import {QueryReadType} from './interfaces/query';
@@ -158,7 +158,7 @@ function createInjectionError(text: string, token: any) {
  * @param di The node injector in which a directive will be added
  * @param def The definition of the directive to be made public
  */
-export function diPublicInInjector(di: LInjector, def: TypedDirectiveDef<any>): void {
+export function diPublicInInjector(di: LInjector, def: DirectiveDef<any>): void {
   bloomAdd(di, def.type);
 }
 
@@ -167,7 +167,7 @@ export function diPublicInInjector(di: LInjector, def: TypedDirectiveDef<any>): 
  *
  * @param def The definition of the directive to be made public
  */
-export function diPublic(def: TypedDirectiveDef<any>): void {
+export function diPublic(def: DirectiveDef<any>): void {
   diPublicInInjector(getOrCreateNodeInjector(), def);
 }
 
@@ -291,7 +291,7 @@ export function getOrCreateInjectable<T>(
         for (let i = start, ii = start + size; i < ii; i++) {
           // Get the definition for the directive at this index and, if it is injectable (diPublic),
           // and matches the given token, return the directive instance.
-          const directiveDef = tData[i] as TypedDirectiveDef<any>;
+          const directiveDef = tData[i] as DirectiveDef<any>;
           if (directiveDef.diPublic && directiveDef.type == token) {
             return node.view.data[i];
           }
@@ -392,7 +392,10 @@ export class ReadFromInjectorFn<T> {
  * @returns The ElementRef instance to use
  */
 export function getOrCreateElementRef(di: LInjector): viewEngine_ElementRef {
-  return di.elementRef || (di.elementRef = new ElementRef(di.node.native));
+  return di.elementRef ||
+      (di.elementRef = new ElementRef(
+           ((di.node.flags & LNodeFlags.TYPE_MASK) === LNodeFlags.Container) ? null :
+                                                                               di.node.native));
 }
 
 export const QUERY_READ_TEMPLATE_REF = <QueryReadType<viewEngine_TemplateRef<any>>>(

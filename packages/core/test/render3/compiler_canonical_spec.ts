@@ -27,6 +27,7 @@ describe('compiler specification', () => {
       class MyComponent {
         // NORMATIVE
         static ngComponentDef = r3.defineComponent({
+          type: MyComponent,
           tag: 'my-component',
           factory: () => new MyComponent(),
           template: function(ctx: MyComponent, cm: boolean) {
@@ -59,6 +60,7 @@ describe('compiler specification', () => {
         constructor() { log.push('ChildComponent'); }
         // NORMATIVE
         static ngComponentDef = r3.defineComponent({
+          type: ChildComponent,
           tag: `child`,
           factory: () => new ChildComponent(),
           template: function(ctx: ChildComponent, cm: boolean) {
@@ -77,6 +79,7 @@ describe('compiler specification', () => {
         constructor() { log.push('SomeDirective'); }
         // NORMATIVE
         static ngDirectiveDef = r3.defineDirective({
+          type: SomeDirective,
           factory: () => new SomeDirective(),
         });
         // /NORMATIVE
@@ -86,6 +89,7 @@ describe('compiler specification', () => {
       class MyComponent {
         // NORMATIVE
         static ngComponentDef = r3.defineComponent({
+          type: MyComponent,
           tag: 'my-component',
           factory: () => new MyComponent(),
           template: function(ctx: MyComponent, cm: boolean) {
@@ -94,8 +98,10 @@ describe('compiler specification', () => {
               r3.e();
               r3.T(3, '!');
             }
-            ChildComponent.ngComponentDef.r(1, 0);
-            SomeDirective.ngDirectiveDef.r(2, 0);
+            ChildComponent.ngComponentDef.h(1, 0);
+            SomeDirective.ngDirectiveDef.h(2, 0);
+            r3.r(1, 0);
+            r3.r(2, 0);
           }
         });
         // /NORMATIVE
@@ -119,6 +125,7 @@ describe('compiler specification', () => {
         constructor(template: TemplateRef<any>) { log.push('ifDirective'); }
         // NORMATIVE
         static ngDirectiveDef = r3.defineDirective({
+          type: IfDirective,
           factory: () => new IfDirective(r3.injectTemplateRef()),
         });
         // /NORMATIVE
@@ -130,6 +137,7 @@ describe('compiler specification', () => {
         salutation = 'Hello';
         // NORMATIVE
         static ngComponentDef = r3.defineComponent({
+          type: MyComponent,
           tag: 'my-component',
           factory: () => new MyComponent(),
           template: function(ctx: MyComponent, cm: boolean) {
@@ -140,7 +148,7 @@ describe('compiler specification', () => {
             }
             let foo = r3.m<any>(1);
             r3.cR(2);
-            IfDirective.ngDirectiveDef.r(3, 2);
+            r3.r(3, 2);
             r3.cr();
 
             function C1(ctx1: any, cm: boolean) {
@@ -169,6 +177,7 @@ describe('compiler specification', () => {
       @Component({selector: 'simple', template: `<div><ng-content></ng-content></div>`})
       class SimpleComponent {
         static ngComponentDef = r3.defineComponent({
+          type: SimpleComponent,
           tag: 'simple',
           factory: () => new SimpleComponent(),
           template: function(ctx: SimpleComponent, cm: boolean) {
@@ -190,6 +199,7 @@ describe('compiler specification', () => {
       })
       class ComplexComponent {
         static ngComponentDef = r3.defineComponent({
+          type: ComplexComponent,
           tag: 'complex',
           factory: () => new ComplexComponent(),
           template: function(ctx: ComplexComponent, cm: boolean) {
@@ -215,6 +225,7 @@ describe('compiler specification', () => {
       })
       class MyApp {
         static ngComponentDef = r3.defineComponent({
+          type: MyApp,
           tag: 'my-app',
           factory: () => new MyApp(),
           template: function(ctx: MyApp, cm: boolean) {
@@ -236,6 +247,7 @@ describe('compiler specification', () => {
       class MyComponent {
         // NORMATIVE
         static ngComponentDef = r3.defineComponent({
+          type: MyComponent,
           tag: 'my-component',
           factory: () => new MyComponent,
           template: function(ctx: MyComponent, cm: boolean) {
@@ -254,6 +266,92 @@ describe('compiler specification', () => {
       expect(renderComp(MyComponent))
           .toEqual('<div class="my-app" title="Hello">Hello <b>World</b>!</div>');
     });
+  });
+
+  describe('lifecycle hooks', () => {
+    let events: string[] = [];
+    let simpleLayout: SimpleLayout;
+
+    beforeEach(() => { events = []; });
+
+    @Component({selector: 'lifecycle-comp', template: ``})
+    class LifecycleComp {
+      @Input() nameMin: string;
+
+      ngOnChanges() { events.push('changes' + this.nameMin); }
+
+      ngOnInit() { events.push('init' + this.nameMin); }
+      ngDoCheck() { events.push('check' + this.nameMin); }
+
+      ngAfterContentInit() { events.push('content init' + this.nameMin); }
+      ngAfterContentChecked() { events.push('content check' + this.nameMin); }
+
+      ngAfterViewInit() { events.push('view init' + this.nameMin); }
+      ngAfterViewChecked() { events.push('view check' + this.nameMin); }
+
+      ngOnDestroy() { events.push(this.nameMin); }
+
+      static ngComponentDef = r3.defineComponent({
+        type: LifecycleComp,
+        tag: 'lifecycle-comp',
+        factory: () => new LifecycleComp(),
+        template: function(ctx: any, cm: boolean) {},
+        inputs: {nameMin: 'name'},
+        features: [r3.NgOnChangesFeature(LifecycleComp)]
+      });
+    }
+
+    @Component({
+      selector: 'simple-layout',
+      template: `
+        <lifecycle-comp [name]="name1"></lifecycle-comp>
+        <lifecycle-comp [name]="name2"></lifecycle-comp>
+      `
+    })
+    class SimpleLayout {
+      name1 = '1';
+      name2 = '2';
+
+      static ngComponentDef = r3.defineComponent({
+        type: SimpleLayout,
+        tag: 'simple-layout',
+        factory: () => simpleLayout = new SimpleLayout(),
+        template: function(ctx: any, cm: boolean) {
+          if (cm) {
+            r3.E(0, LifecycleComp);
+            r3.e();
+            r3.E(2, LifecycleComp);
+            r3.e();
+          }
+          r3.p(0, 'name', r3.b(ctx.name1));
+          r3.p(2, 'name', r3.b(ctx.name2));
+          LifecycleComp.ngComponentDef.h(1, 0);
+          LifecycleComp.ngComponentDef.h(3, 2);
+          r3.r(1, 0);
+          r3.r(3, 2);
+        }
+      });
+    }
+
+    it('should gen hooks with a few simple components', () => {
+      expect(renderComp(SimpleLayout))
+          .toEqual(`<lifecycle-comp></lifecycle-comp><lifecycle-comp></lifecycle-comp>`);
+      expect(events).toEqual([
+        'changes1', 'init1', 'check1', 'changes2', 'init2', 'check2', 'content init1',
+        'content check1', 'content init2', 'content check2', 'view init1', 'view check1',
+        'view init2', 'view check2'
+      ]);
+
+      events = [];
+      simpleLayout.name1 = '-one';
+      simpleLayout.name2 = '-two';
+      r3.detectChanges(simpleLayout);
+      expect(events).toEqual([
+        'changes-one', 'check-one', 'changes-two', 'check-two', 'content check-one',
+        'content check-two', 'view check-one', 'view check-two'
+      ]);
+    });
+
   });
 
   describe('template variables', () => {
@@ -304,14 +402,12 @@ describe('compiler specification', () => {
 
       // NORMATIVE
       static ngDirectiveDef = r3.defineDirective({
+        type: ForOfDirective,
         factory: function ForOfDirective_Factory() {
           return new ForOfDirective(r3.injectViewContainerRef(), r3.injectTemplateRef());
         },
         // TODO(chuckj): Enable when ngForOf enabling lands.
         // features: [NgOnChangesFeature(NgForOf)],
-        refresh: function ForOfDirective_Refresh(directiveIndex: number, elementIndex: number) {
-          r3.m<ForOfDirective>(directiveIndex).ngDoCheck();
-        },
         inputs: {forOf: 'forOf'}
       });
       // /NORMATIVE
@@ -333,9 +429,10 @@ describe('compiler specification', () => {
 
         // NORMATIVE
         static ngComponentDef = r3.defineComponent({
+          type: MyComponent,
           tag: 'my-component',
           factory: function MyComponent_Factory() { return new MyComponent(); },
-          template: function MyComponentTemplate(ctx: MyComponent, cm: boolean) {
+          template: function MyComponent_Template(ctx: MyComponent, cm: boolean) {
             if (cm) {
               r3.E(0, 'ul');
               r3.C(1, c1_dirs, MyComponent_ForOfDirective_Template_1);
@@ -343,7 +440,7 @@ describe('compiler specification', () => {
             }
             r3.p(1, 'forOf', r3.b(ctx.items));
             r3.cR(1);
-            ForOfDirective.ngDirectiveDef.r(2, 1);
+            r3.r(2, 1);
             r3.cr();
 
             function MyComponent_ForOfDirective_Template_1(ctx1: any, cm: boolean) {
@@ -385,7 +482,7 @@ describe('compiler specification', () => {
                 <li *for="let info of item.infos">
                   {{item.name}}: {{info.description}}
                 </li>
-              </ui>
+              </ul>
             </li>
           </ul>`
       })
@@ -397,6 +494,7 @@ describe('compiler specification', () => {
 
         // NORMATIVE
         static ngComponentDef = r3.defineComponent({
+          type: MyComponent,
           tag: 'my-component',
           factory: function MyComponent_Factory() { return new MyComponent(); },
           template: function MyComponent_Template(ctx: MyComponent, cm: boolean) {
@@ -407,23 +505,25 @@ describe('compiler specification', () => {
             }
             r3.p(1, 'forOf', r3.b(ctx.items));
             r3.cR(1);
-            ForOfDirective.ngDirectiveDef.r(2, 1);
+            r3.r(2, 1);
             r3.cr();
 
             function MyComponent_ForOfDirective_Template_1(ctx1: any, cm: boolean) {
               if (cm) {
-                r3.E(0, 'div');
-                r3.T(1);
+                r3.E(0, 'li');
+                r3.E(1, 'div');
+                r3.T(2);
                 r3.e();
-                r3.E(2, 'ul');
-                r3.C(3, c1_dirs, MyComponent_ForOfDirective_ForOfDirective_Template_3);
+                r3.E(3, 'ul');
+                r3.C(4, c1_dirs, MyComponent_ForOfDirective_ForOfDirective_Template_3);
+                r3.e();
                 r3.e();
               }
               const l0_item = ctx1.$implicit;
-              r3.t(1, r3.b1('', l0_item.name, ''));
-              r3.p(4, 'forOf', r3.b(ctx.items));
-              r3.cR(3);
-              ForOfDirective.ngDirectiveDef.r(4, 3);
+              r3.p(4, 'forOf', r3.b(l0_item.infos));
+              r3.t(2, r3.b1('', l0_item.name, ''));
+              r3.cR(4);
+              r3.r(5, 4);
               r3.cr();
 
               function MyComponent_ForOfDirective_ForOfDirective_Template_3(
@@ -433,8 +533,8 @@ describe('compiler specification', () => {
                   r3.T(1);
                   r3.e();
                 }
-                const l0_info = ctx2.info;
-                r3.t(1, r3.b2('', l0_item.name, ': ', l0_info.description, ''));
+                const l0_info = ctx2.$implicit;
+                r3.t(1, r3.b2(' ', l0_item.name, ': ', l0_info.description, ' '));
               }
             }
           }
