@@ -15,13 +15,13 @@ import {LQueries} from './interfaces/query';
 import {LView, LifecycleStage, TData, TView} from './interfaces/view';
 
 import {LContainerNode, LElementNode, LNode, LNodeFlags, LProjectionNode, LTextNode, LViewNode, TNode, TContainerNode, InitialInputData, InitialInputs, PropertyAliases, PropertyAliasValue,} from './interfaces/node';
-import {assertNodeType, assertNodeOfPossibleTypes} from './node_assert';
+import {assertNodeType} from './node_assert';
 import {appendChild, insertChild, insertView, appendProjectedNode, removeView, canInsertNativeNode} from './node_manipulation';
-import {isNodeMatchingSelector} from './node_selector_matcher';
+import {matchingSelectorIndex} from './node_selector_matcher';
 import {ComponentDef, ComponentTemplate, ComponentType, DirectiveDef, DirectiveType} from './interfaces/definition';
 import {RElement, RText, Renderer3, RendererFactory3, ProceduralRenderer3, ObjectOrientedRenderer3, RendererStyleFlags3} from './interfaces/renderer';
 import {isDifferent, stringify} from './util';
-import {executeViewHooks, executeContentHooks, queueLifecycleHooks, queueInitHooks, executeInitHooks} from './hooks';
+import {executeHooks, executeContentHooks, queueLifecycleHooks, queueInitHooks, executeInitHooks} from './hooks';
 
 
 /**
@@ -151,7 +151,9 @@ export function enterView(newView: LView, host: LElementNode | LViewNode | null)
  * the direction of traversal (up or down the view tree) a bit clearer.
  */
 export function leaveView(newView: LView): void {
-  executeViewHooks(currentView);
+  executeHooks(
+      currentView.data, currentView.tView.viewHooks, currentView.tView.viewCheckHooks,
+      creationMode);
   currentView.creationMode = false;
   currentView.lifecycleStage = LifecycleStage.INIT;
   currentView.tView.firstTemplatePass = false;
@@ -487,8 +489,11 @@ export function createTView(): TView {
     data: [],
     firstTemplatePass: true,
     initHooks: null,
+    checkHooks: null,
     contentHooks: null,
+    contentCheckHooks: null,
     viewHooks: null,
+    viewCheckHooks: null,
     destroyHooks: null
   };
 }
@@ -1045,7 +1050,7 @@ export function containerRefreshStart(index: number): void {
 
   // We need to execute init hooks here so ngOnInit hooks are called in top level views
   // before they are called in embedded views (for backwards compatibility).
-  executeInitHooks(currentView);
+  executeInitHooks(currentView, currentView.tView, creationMode);
 }
 
 /**
@@ -1176,8 +1181,8 @@ export function viewEnd(): void {
  * @param elementIndex
  */
 export function componentRefresh<T>(directiveIndex: number, elementIndex: number): void {
-  executeInitHooks(currentView);
-  executeContentHooks(currentView);
+  executeInitHooks(currentView, currentView.tView, creationMode);
+  executeContentHooks(currentView, currentView.tView, creationMode);
   const template = (tData[directiveIndex] as ComponentDef<T>).template;
   if (template != null) {
     ngDevMode && assertDataInRange(elementIndex);
@@ -1185,7 +1190,7 @@ export function componentRefresh<T>(directiveIndex: number, elementIndex: number
     ngDevMode && assertNodeType(element, LNodeFlags.Element);
     ngDevMode && assertNotEqual(element.data, null, 'isComponent');
     ngDevMode && assertDataInRange(directiveIndex);
-    const directive = data[directiveIndex];
+    const directive = getDirectiveInstance<T>(data[directiveIndex]);
     const hostView = element.data !;
     ngDevMode && assertNotEqual(hostView, null, 'hostView');
     const oldView = enterView(hostView, element);
@@ -1217,33 +1222,16 @@ export function projectionDef(index: number, selectors?: CssSelector[]): void {
   let componentChild = componentNode.child;
 
   while (componentChild !== null) {
-    if (!selectors) {
-      distributedNodes[0].push(componentChild);
-    } else if (
-        (componentChild.flags & LNodeFlags.TYPE_MASK) === LNodeFlags.Element ||
-        (componentChild.flags & LNodeFlags.TYPE_MASK) === LNodeFlags.Container) {
-      // Only trying to match selectors against:
-      // - elements, excluding text nodes;
-      // - containers that have tagName and attributes associated.
-
-      if (componentChild.tNode) {
-        for (let i = 0; i < selectors !.length; i++) {
-          if (isNodeMatchingSelector(componentChild.tNode, selectors ![i])) {
-            distributedNodes[i + 1].push(componentChild);
-            break;  // first matching selector "captures" a given node
-          } else {
-            distributedNodes[0].push(componentChild);
-          }
-        }
-      } else {
-        distributedNodes[0].push(componentChild);
-      }
-
-    } else if ((componentChild.flags & LNodeFlags.TYPE_MASK) === LNodeFlags.Projection) {
-      // we don't descend into nodes to re-project (not trying to match selectors against nodes to
-      // re-project)
+    // execute selector matching logic if and only if:
+    // - there are selectors defined
+    // - a node has a tag name / attributes that can be matched
+    if (selectors && componentChild.tNode) {
+      const matchedIdx = matchingSelectorIndex(componentChild.tNode, selectors !);
+      distributedNodes[matchedIdx].push(componentChild);
+    } else {
       distributedNodes[0].push(componentChild);
     }
+
     componentChild = componentChild.next;
   }
 
@@ -1286,9 +1274,16 @@ function appendToProjectionNode(
  * @param nodeIndex
  * @param localIndex - index under which distribution of projected nodes was memorized
  * @param selectorIndex - 0 means <ng-content> without any selector
+ * @param attrs - attributes attached to the ng-content node, if present
  */
-export function projection(nodeIndex: number, localIndex: number, selectorIndex: number = 0): void {
+export function projection(
+    nodeIndex: number, localIndex: number, selectorIndex: number = 0, attrs?: string[]): void {
   const node = createLNode(nodeIndex, LNodeFlags.Projection, null, {head: null, tail: null});
+
+  if (node.tNode == null) {
+    node.tNode = createTNode(null, attrs || null, null, null);
+  }
+
   isParent = false;  // self closing
   const currentParent = node.parent;
 
@@ -1856,6 +1851,12 @@ export function getPreviousOrParentNode(): LNode {
 
 export function getRenderer(): Renderer3 {
   return renderer;
+}
+
+export function getDirectiveInstance<T>(instanceOrArray: T | [T]): T {
+  // Directives with content queries store an array in data[directiveIndex]
+  // with the instance as the first index
+  return Array.isArray(instanceOrArray) ? instanceOrArray[0] : instanceOrArray;
 }
 
 export function assertPreviousIsParent() {
