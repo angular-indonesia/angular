@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 import {defineComponent} from '../../src/render3/index';
-import {bind, componentRefresh, container, containerRefreshEnd, containerRefreshStart, elementEnd, elementProperty, elementStart, embeddedViewEnd, embeddedViewStart, load} from '../../src/render3/instructions';
+import {bind, container, containerRefreshEnd, containerRefreshStart, directiveRefresh, elementEnd, elementProperty, elementStart, embeddedViewEnd, embeddedViewStart, load} from '../../src/render3/instructions';
 import {pureFunction1, pureFunction2, pureFunction3, pureFunction4, pureFunction5, pureFunction6, pureFunction7, pureFunction8, pureFunctionV} from '../../src/render3/pure_function';
 import {renderToHtml} from '../../test/render3/render_util';
 
@@ -36,7 +36,7 @@ describe('array literals', () => {
       }
       elementProperty(0, 'names', bind(pureFunction1(e0_ff, ctx.customName)));
       MyComp.ngComponentDef.h(1, 0);
-      componentRefresh(1, 0);
+      directiveRefresh(1, 0);
     }
 
     renderToHtml(Template, {customName: 'Carson'});
@@ -91,7 +91,7 @@ describe('array literals', () => {
       elementProperty(0, 'names1', bind(pureFunction1(e0_ff, ctx.customName)));
       elementProperty(0, 'names2', bind(pureFunction1(e0_ff_1, ctx.customName2)));
       ManyPropComp.ngComponentDef.h(1, 0);
-      componentRefresh(1, 0);
+      directiveRefresh(1, 0);
     }
 
     renderToHtml(Template, {customName: 'Carson', customName2: 'George'});
@@ -129,7 +129,7 @@ describe('array literals', () => {
           }
           elementProperty(0, 'names', bind(ctx.someFn(pureFunction1(e0_ff, ctx.customName))));
           MyComp.ngComponentDef.h(1, 0);
-          componentRefresh(1, 0);
+          directiveRefresh(1, 0);
         }
       });
     }
@@ -143,8 +143,8 @@ describe('array literals', () => {
       }
       ParentComp.ngComponentDef.h(1, 0);
       ParentComp.ngComponentDef.h(3, 2);
-      componentRefresh(1, 0);
-      componentRefresh(3, 2);
+      directiveRefresh(1, 0);
+      directiveRefresh(3, 2);
     }
 
     renderToHtml(Template, {});
@@ -172,7 +172,7 @@ describe('array literals', () => {
       }
       elementProperty(0, 'names', bind(pureFunction2(e0_ff, ctx.customName, ctx.customName2)));
       MyComp.ngComponentDef.h(1, 0);
-      componentRefresh(1, 0);
+      directiveRefresh(1, 0);
     }
 
     renderToHtml(Template, {customName: 'Carson', customName2: 'Hannah'});
@@ -255,12 +255,12 @@ describe('array literals', () => {
       MyComp.ngComponentDef.h(7, 6);
       MyComp.ngComponentDef.h(9, 8);
       MyComp.ngComponentDef.h(11, 10);
-      componentRefresh(1, 0);
-      componentRefresh(3, 2);
-      componentRefresh(5, 4);
-      componentRefresh(7, 6);
-      componentRefresh(9, 8);
-      componentRefresh(11, 10);
+      directiveRefresh(1, 0);
+      directiveRefresh(3, 2);
+      directiveRefresh(5, 4);
+      directiveRefresh(7, 6);
+      directiveRefresh(9, 8);
+      directiveRefresh(11, 10);
     }
 
     renderToHtml(Template, ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']);
@@ -278,6 +278,14 @@ describe('array literals', () => {
     expect(f6Comp !.names).toEqual(['a', 'b', 'c1', 'd1', 'e1', 'f1', 'g1', 'h1']);
     expect(f7Comp !.names).toEqual(['a', 'b1', 'c1', 'd1', 'e1', 'f1', 'g1', 'h1']);
     expect(f8Comp !.names).toEqual(['a1', 'b1', 'c1', 'd1', 'e1', 'f1', 'g1', 'h1']);
+
+    renderToHtml(Template, ['a1', 'b1', 'c1', 'd1', 'e1', 'f1', 'g1', 'h2', 'i1']);
+    expect(f3Comp !.names).toEqual(['a', 'b', 'c', 'd', 'e', 'f1', 'g1', 'h2']);
+    expect(f4Comp !.names).toEqual(['a', 'b', 'c', 'd', 'e1', 'f1', 'g1', 'h2']);
+    expect(f5Comp !.names).toEqual(['a', 'b', 'c', 'd1', 'e1', 'f1', 'g1', 'h2']);
+    expect(f6Comp !.names).toEqual(['a', 'b', 'c1', 'd1', 'e1', 'f1', 'g1', 'h2']);
+    expect(f7Comp !.names).toEqual(['a', 'b1', 'c1', 'd1', 'e1', 'f1', 'g1', 'h2']);
+    expect(f8Comp !.names).toEqual(['a1', 'b1', 'c1', 'd1', 'e1', 'f1', 'g1', 'h2']);
   });
 
   it('should work with pureFunctionV for 9+ bindings', () => {
@@ -300,7 +308,7 @@ describe('array literals', () => {
                         c[0], c[1], c[2], c[3], pureFunction1(e0_ff_1, c[4]), c[5], c[6], c[7], c[8]
                       ])));
       MyComp.ngComponentDef.h(1, 0);
-      componentRefresh(1, 0);
+      directiveRefresh(1, 0);
     }
 
     expect(myComp !.names).toEqual([
@@ -345,7 +353,7 @@ describe('object literals', () => {
       }
       elementProperty(0, 'config', bind(pureFunction1(e0_ff, ctx.name)));
       ObjectComp.ngComponentDef.h(1, 0);
-      componentRefresh(1, 0);
+      directiveRefresh(1, 0);
     }
 
     renderToHtml(Template, {name: 'slide'});
@@ -383,7 +391,7 @@ describe('object literals', () => {
           bind(pureFunction2(
               e0_ff, ctx.name, pureFunction1(e0_ff_1, pureFunction1(e0_ff_2, ctx.duration)))));
       ObjectComp.ngComponentDef.h(1, 0);
-      componentRefresh(1, 0);
+      directiveRefresh(1, 0);
     }
 
     renderToHtml(Template, {name: 'slide', duration: 100});
@@ -451,7 +459,7 @@ describe('object literals', () => {
               0, 'config',
               bind(pureFunction2(e0_ff, ctx.configs[i].opacity, ctx.configs[i].duration)));
           ObjectComp.ngComponentDef.h(1, 0);
-          componentRefresh(1, 0);
+          directiveRefresh(1, 0);
           embeddedViewEnd();
         }
       }
