@@ -756,6 +756,317 @@ describe('change detection', () => {
 
     });
 
+    describe('markForCheck()', () => {
+      let comp: OnPushComp;
+
+      class OnPushComp {
+        value = 'one';
+
+        doCheckCount = 0;
+
+        constructor(public cdr: ChangeDetectorRef) {}
+
+        ngDoCheck() { this.doCheckCount++; }
+
+        static ngComponentDef = defineComponent({
+          type: OnPushComp,
+          tag: 'on-push-comp',
+          factory: () => comp = new OnPushComp(injectChangeDetectorRef()),
+          /** {{ value }} */
+          template: (ctx: OnPushComp, cm: boolean) => {
+            if (cm) {
+              text(0);
+            }
+            textBinding(0, bind(ctx.value));
+          },
+          changeDetection: ChangeDetectionStrategy.OnPush
+        });
+      }
+
+      class OnPushParent {
+        value = 'one';
+
+        static ngComponentDef = defineComponent({
+          type: OnPushParent,
+          tag: 'on-push-parent',
+          factory: () => new OnPushParent(),
+          /**
+           * {{ value }} -
+           * <on-push-comp></on-push-comp>
+           */
+          template: (ctx: OnPushParent, cm: boolean) => {
+            if (cm) {
+              text(0);
+              elementStart(1, OnPushComp);
+              elementEnd();
+            }
+            textBinding(0, interpolation1('', ctx.value, ' - '));
+            OnPushComp.ngComponentDef.h(2, 1);
+            directiveRefresh(2, 1);
+          },
+          changeDetection: ChangeDetectionStrategy.OnPush
+        });
+      }
+
+      it('should schedule check on OnPush components', () => {
+        const parent = renderComponent(OnPushParent);
+        expect(getRenderedText(parent)).toEqual('one - one');
+
+        comp.value = 'two';
+        tick(parent);
+        expect(getRenderedText(parent)).toEqual('one - one');
+
+        comp.cdr.markForCheck();
+        requestAnimationFrame.flush();
+        expect(getRenderedText(parent)).toEqual('one - two');
+      });
+
+      it('should only run change detection once with multiple calls to markForCheck', () => {
+        renderComponent(OnPushParent);
+        expect(comp.doCheckCount).toEqual(1);
+
+        comp.cdr.markForCheck();
+        comp.cdr.markForCheck();
+        comp.cdr.markForCheck();
+        comp.cdr.markForCheck();
+        comp.cdr.markForCheck();
+        requestAnimationFrame.flush();
+
+        expect(comp.doCheckCount).toEqual(2);
+      });
+
+      it('should schedule check on ancestor OnPush components', () => {
+        const parent = renderComponent(OnPushParent);
+        expect(getRenderedText(parent)).toEqual('one - one');
+
+        parent.value = 'two';
+        tick(parent);
+        expect(getRenderedText(parent)).toEqual('one - one');
+
+        comp.cdr.markForCheck();
+        requestAnimationFrame.flush();
+        expect(getRenderedText(parent)).toEqual('two - one');
+
+      });
+
+      it('should schedule check on OnPush components in embedded views', () => {
+        class EmbeddedViewParent {
+          value = 'one';
+          showing = true;
+
+          static ngComponentDef = defineComponent({
+            type: EmbeddedViewParent,
+            tag: 'embedded-view-parent',
+            factory: () => new EmbeddedViewParent(),
+            /**
+             * {{ value }} -
+             * % if (ctx.showing) {
+             *   <on-push-comp></on-push-comp>
+             * % }
+             */
+            template: (ctx: EmbeddedViewParent, cm: boolean) => {
+              if (cm) {
+                text(0);
+                container(1);
+              }
+              textBinding(0, interpolation1('', ctx.value, ' - '));
+              containerRefreshStart(1);
+              {
+                if (ctx.showing) {
+                  if (embeddedViewStart(0)) {
+                    elementStart(0, OnPushComp);
+                    elementEnd();
+                  }
+                  OnPushComp.ngComponentDef.h(1, 0);
+                  directiveRefresh(1, 0);
+                  embeddedViewEnd();
+                }
+              }
+              containerRefreshEnd();
+            },
+            changeDetection: ChangeDetectionStrategy.OnPush
+          });
+        }
+
+        const parent = renderComponent(EmbeddedViewParent);
+        expect(getRenderedText(parent)).toEqual('one - one');
+
+        comp.value = 'two';
+        tick(parent);
+        expect(getRenderedText(parent)).toEqual('one - one');
+
+        comp.cdr.markForCheck();
+        requestAnimationFrame.flush();
+        expect(getRenderedText(parent)).toEqual('one - two');
+
+        parent.value = 'two';
+        tick(parent);
+        expect(getRenderedText(parent)).toEqual('one - two');
+
+        comp.cdr.markForCheck();
+        requestAnimationFrame.flush();
+        expect(getRenderedText(parent)).toEqual('two - two');
+      });
+
+      // TODO(kara): add test for dynamic views once bug fix is in
+    });
+
+    describe('checkNoChanges', () => {
+      let comp: NoChangesComp;
+
+      class NoChangesComp {
+        value = 1;
+        doCheckCount = 0;
+        contentCheckCount = 0;
+        viewCheckCount = 0;
+
+        ngDoCheck() { this.doCheckCount++; }
+
+        ngAfterContentChecked() { this.contentCheckCount++; }
+
+        ngAfterViewChecked() { this.viewCheckCount++; }
+
+        constructor(public cdr: ChangeDetectorRef) {}
+
+        static ngComponentDef = defineComponent({
+          type: NoChangesComp,
+          tag: 'no-changes-comp',
+          factory: () => comp = new NoChangesComp(injectChangeDetectorRef()),
+          template: (ctx: NoChangesComp, cm: boolean) => {
+            if (cm) {
+              text(0);
+            }
+            textBinding(0, bind(ctx.value));
+          }
+        });
+      }
+
+      class AppComp {
+        value = 1;
+
+        constructor(public cdr: ChangeDetectorRef) {}
+
+        static ngComponentDef = defineComponent({
+          type: AppComp,
+          tag: 'app-comp',
+          factory: () => new AppComp(injectChangeDetectorRef()),
+          /**
+           * {{ value }} -
+           * <no-changes-comp></no-changes-comp>
+           */
+          template: (ctx: AppComp, cm: boolean) => {
+            if (cm) {
+              text(0);
+              elementStart(1, NoChangesComp);
+              elementEnd();
+            }
+            textBinding(0, interpolation1('', ctx.value, ' - '));
+            NoChangesComp.ngComponentDef.h(2, 1);
+            directiveRefresh(2, 1);
+          }
+        });
+      }
+
+      it('should throw if bindings in current view have changed', () => {
+        const comp = renderComponent(NoChangesComp);
+
+        expect(() => comp.cdr.checkNoChanges()).not.toThrow();
+
+        comp.value = 2;
+        expect(() => comp.cdr.checkNoChanges())
+            .toThrowError(
+                /ExpressionChangedAfterItHasBeenCheckedError: .+ Previous value: '1'. Current value: '2'/gi);
+      });
+
+      it('should throw if interpolations in current view have changed', () => {
+        const app = renderComponent(AppComp);
+
+        expect(() => app.cdr.checkNoChanges()).not.toThrow();
+
+        app.value = 2;
+        expect(() => app.cdr.checkNoChanges())
+            .toThrowError(
+                /ExpressionChangedAfterItHasBeenCheckedError: .+ Previous value: '1'. Current value: '2'/gi);
+      });
+
+      it('should throw if bindings in children of current view have changed', () => {
+        const app = renderComponent(AppComp);
+
+        expect(() => app.cdr.checkNoChanges()).not.toThrow();
+
+        comp.value = 2;
+        expect(() => app.cdr.checkNoChanges())
+            .toThrowError(
+                /ExpressionChangedAfterItHasBeenCheckedError: .+ Previous value: '1'. Current value: '2'/gi);
+      });
+
+      it('should throw if bindings in embedded view have changed', () => {
+        class EmbeddedViewApp {
+          value = 1;
+          showing = true;
+
+          constructor(public cdr: ChangeDetectorRef) {}
+
+          static ngComponentDef = defineComponent({
+            type: EmbeddedViewApp,
+            tag: 'embedded-view-app',
+            factory: () => new EmbeddedViewApp(injectChangeDetectorRef()),
+            /**
+             * % if (showing) {
+             *  {{ value }}
+             * %}
+             */
+            template: (ctx: EmbeddedViewApp, cm: boolean) => {
+              if (cm) {
+                container(0);
+              }
+              containerRefreshStart(0);
+              {
+                if (ctx.showing) {
+                  if (embeddedViewStart(0)) {
+                    text(0);
+                  }
+                  textBinding(0, bind(ctx.value));
+                  embeddedViewEnd();
+                }
+              }
+              containerRefreshEnd();
+            }
+          });
+        }
+
+        const app = renderComponent(EmbeddedViewApp);
+
+        expect(() => app.cdr.checkNoChanges()).not.toThrow();
+
+        app.value = 2;
+        expect(() => app.cdr.checkNoChanges())
+            .toThrowError(
+                /ExpressionChangedAfterItHasBeenCheckedError: .+ Previous value: '1'. Current value: '2'/gi);
+      });
+
+      it('should NOT call lifecycle hooks', () => {
+        const app = renderComponent(AppComp);
+        expect(comp.doCheckCount).toEqual(1);
+        expect(comp.contentCheckCount).toEqual(1);
+        expect(comp.viewCheckCount).toEqual(1);
+
+        comp.value = 2;
+        expect(() => app.cdr.checkNoChanges()).toThrow();
+        expect(comp.doCheckCount).toEqual(1);
+        expect(comp.contentCheckCount).toEqual(1);
+        expect(comp.viewCheckCount).toEqual(1);
+      });
+
+      it('should NOT throw if bindings in ancestors of current view have changed', () => {
+        const app = renderComponent(AppComp);
+
+        app.value = 2;
+        expect(() => comp.cdr.checkNoChanges()).not.toThrow();
+      });
+
+    });
+
   });
 
 });

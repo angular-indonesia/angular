@@ -151,6 +151,13 @@ let bindingIndex: number;
  */
 let cleanup: any[]|null;
 
+/**
+ * In this mode, any changes in bindings will throw an ExpressionChangedAfterChecked error.
+ *
+ * Necessary to support ChangeDetectorRef.checkNoChanges().
+ */
+let checkNoChangesMode = false;
+
 const enum BindingDirection {
   Input,
   Output,
@@ -194,9 +201,11 @@ export function enterView(newView: LView, host: LElementNode | LViewNode | null)
  * the direction of traversal (up or down the view tree) a bit clearer.
  */
 export function leaveView(newView: LView): void {
-  executeHooks(
-      currentView.data, currentView.tView.viewHooks, currentView.tView.viewCheckHooks,
-      creationMode);
+  if (!checkNoChangesMode) {
+    executeHooks(
+        currentView.data, currentView.tView.viewHooks, currentView.tView.viewCheckHooks,
+        creationMode);
+  }
   // Views should be clean and in update mode after being checked, so these bits are cleared
   currentView.flags &= ~(LViewFlags.CreationMode | LViewFlags.Dirty);
   currentView.lifecycleStage = LifecycleStage.INIT;
@@ -746,7 +755,9 @@ export function elementProperty<T>(
     setInputsForProperty(dataValue, value);
     markDirtyIfOnPush(node);
   } else {
-    value = (sanitizer != null ? sanitizer(value) : stringify(value)) as any;
+    // It is assumed that the sanitizer is only added when the compiler determines that the property
+    // is risky, so sanitization can be done without further checks.
+    value = sanitizer != null ? (sanitizer(value) as any) : value;
     const native = node.native;
     isProceduralRenderer(renderer) ? renderer.setProperty(native, propName, value) :
                                      (native.setProperty ? native.setProperty(propName, value) :
@@ -1135,9 +1146,11 @@ export function containerRefreshStart(index: number): void {
                    (previousOrParentNode as LContainerNode).native, undefined,
                    `the container's native element should not have been set yet.`);
 
-  // We need to execute init hooks here so ngOnInit hooks are called in top level views
-  // before they are called in embedded views (for backwards compatibility).
-  executeInitHooks(currentView, currentView.tView, creationMode);
+  if (!checkNoChangesMode) {
+    // We need to execute init hooks here so ngOnInit hooks are called in top level views
+    // before they are called in embedded views (for backwards compatibility).
+    executeInitHooks(currentView, currentView.tView, creationMode);
+  }
 }
 
 /**
@@ -1270,8 +1283,10 @@ export function embeddedViewEnd(): void {
  * @param elementIndex
  */
 export function directiveRefresh<T>(directiveIndex: number, elementIndex: number): void {
-  executeInitHooks(currentView, currentView.tView, creationMode);
-  executeContentHooks(currentView, currentView.tView, creationMode);
+  if (!checkNoChangesMode) {
+    executeInitHooks(currentView, currentView.tView, creationMode);
+    executeContentHooks(currentView, currentView.tView, creationMode);
+  }
   const template = (tData[directiveIndex] as ComponentDef<T>).template;
   if (template != null) {
     ngDevMode && assertDataInRange(elementIndex);
@@ -1499,7 +1514,7 @@ export function wrapListenerWithDirtyAndDefault(
 }
 
 /** Marks current view and all ancestors dirty */
-function markViewDirty(view: LView): void {
+export function markViewDirty(view: LView): void {
   let currentView: LView|null = view;
 
   while (currentView.parent != null) {
@@ -1594,6 +1609,37 @@ export function detectChanges<T>(component: T): void {
 }
 
 
+/**
+ * Checks the change detector and its children, and throws if any changes are detected.
+ *
+ * This is used in development mode to verify that running change detection doesn't
+ * introduce other changes.
+ */
+export function checkNoChanges<T>(component: T): void {
+  checkNoChangesMode = true;
+  try {
+    detectChanges(component);
+  } finally {
+    checkNoChangesMode = false;
+  }
+}
+
+/** Throws an ExpressionChangedAfterChecked error if checkNoChanges mode is on. */
+function throwErrorIfNoChangesMode(oldValue: any, currValue: any): never|void {
+  if (checkNoChangesMode) {
+    let msg =
+        `ExpressionChangedAfterItHasBeenCheckedError: Expression has changed after it was checked. Previous value: '${oldValue}'. Current value: '${currValue}'.`;
+    if (creationMode) {
+      msg +=
+          ` It seems like the view has been created after its parent and its children have been dirty checked.` +
+          ` Has it been created in a change detection hook ?`;
+    }
+    // TODO: include debug context
+    throw new Error(msg);
+  }
+}
+
+
 /** Checks the view of the component provided. Does not gate on dirty checks or execute doCheck. */
 function detectChangesInternal<T>(hostView: LView, hostNode: LElementNode, component: T) {
   const componentIndex = hostNode.flags >> LNodeFlags.INDX_SHIFT;
@@ -1672,6 +1718,7 @@ export function bind<T>(value: T | NO_CHANGE): T|NO_CHANGE {
 
   const changed: boolean = value !== NO_CHANGE && isDifferent(data[bindingIndex], value);
   if (changed) {
+    throwErrorIfNoChangesMode(data[bindingIndex], value);
     data[bindingIndex] = value;
   }
   bindingIndex++;
@@ -1841,14 +1888,17 @@ export function consumeBinding(): any {
 export function bindingUpdated(value: any): boolean {
   ngDevMode && assertNotEqual(value, NO_CHANGE, 'Incoming value should never be NO_CHANGE.');
 
-  if (creationMode || isDifferent(data[bindingIndex], value)) {
-    creationMode && initBindings();
-    data[bindingIndex++] = value;
-    return true;
+  if (creationMode) {
+    initBindings();
+  } else if (isDifferent(data[bindingIndex], value)) {
+    throwErrorIfNoChangesMode(data[bindingIndex], value);
   } else {
     bindingIndex++;
     return false;
   }
+
+  data[bindingIndex++] = value;
+  return true;
 }
 
 /** Updates binding if changed, then returns the latest value. */
