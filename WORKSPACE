@@ -7,13 +7,16 @@ http_archive(
     sha256 = "11c0d73bdcb4b2608abbe5967be5a910bdaebf848eb13e4e7f8413bbdeb940b8",
 )
 
-load("@build_bazel_rules_nodejs//:defs.bzl", "check_bazel_version", "node_repositories")
+load("@build_bazel_rules_nodejs//:defs.bzl", "check_bazel_version", "node_repositories", "yarn_install")
 
 check_bazel_version("0.9.0")
-node_repositories(package_json = [
-    "//:package.json",
-    "//tools/ts-api-guardian:package.json",
-])
+node_repositories(package_json = ["//:package.json"])
+
+yarn_install(
+    name = "ts-api-guardian_runtime_deps",
+    package_json = "//tools/ts-api-guardian:package.json",
+    yarn_lock = "//tools/ts-api-guardian:yarn.lock",
+)
 
 http_archive(
     name = "build_bazel_rules_typescript",
@@ -29,6 +32,13 @@ ts_setup_workspace()
 local_repository(
     name = "rxjs",
     path = "node_modules/rxjs/src",
+)
+
+# Point to the integration test workspace just so that Bazel doesn't descend into it
+# when expanding the //... pattern
+local_repository(
+    name = "bazel_integration_test",
+    path = "integration/bazel",
 )
 
 # This commit matches the version of buildifier in angular/ngcontainer
