@@ -60,25 +60,16 @@
     "name": "NgIfContext"
   },
   {
-    "name": "NgOnChangesFeature"
-  },
-  {
     "name": "Optional"
   },
   {
     "name": "PARAMETERS"
   },
   {
-    "name": "PRIVATE_PREFIX"
-  },
-  {
     "name": "ROOT_DIRECTIVE_INDICES"
   },
   {
     "name": "RecordViewTuple"
-  },
-  {
-    "name": "SimpleChange"
   },
   {
     "name": "SkipSelf"
@@ -204,9 +195,6 @@
     "name": "addComponentLogic"
   },
   {
-    "name": "addDestroyable"
-  },
-  {
     "name": "addRemoveViewFromContainer"
   },
   {
@@ -279,6 +267,9 @@
     "name": "createOutput"
   },
   {
+    "name": "createRootContext"
+  },
+  {
     "name": "createTNode"
   },
   {
@@ -303,7 +294,13 @@
     "name": "defineInjector"
   },
   {
+    "name": "destroyLView"
+  },
+  {
     "name": "destroyViewTree"
+  },
+  {
+    "name": "detachView"
   },
   {
     "name": "detectChanges"
@@ -384,6 +381,9 @@
     "name": "getChildLNode"
   },
   {
+    "name": "getCleanup"
+  },
+  {
     "name": "getCurrentSanitizer"
   },
   {
@@ -445,6 +445,9 @@
   },
   {
     "name": "getSymbolIterator"
+  },
+  {
+    "name": "getTViewCleanup"
   },
   {
     "name": "getTypeNameForDebugging"
@@ -630,6 +633,12 @@
     "name": "setUpAttributes"
   },
   {
+    "name": "storeCleanupFn"
+  },
+  {
+    "name": "storeCleanupWithContext"
+  },
+  {
     "name": "stringify"
   },
   {
@@ -651,13 +660,16 @@
     "name": "throwMultipleComponentError"
   },
   {
-    "name": "tick"
+    "name": "tickRootContext"
   },
   {
     "name": "trackByIdentity"
   },
   {
     "name": "viewAttached"
+  },
+  {
+    "name": "walkLNodeTree"
   },
   {
     "name": "wrapListenerWithDirtyAndDefault"

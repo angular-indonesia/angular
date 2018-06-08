@@ -103,7 +103,7 @@ export class ComponentFixture<T> extends BaseFixture {
 
   constructor(
       private componentType: ComponentType<T>,
-      opts: {injector?: Injector, sanitizer?: Sanitizer} = {}) {
+      opts: {injector?: Injector, sanitizer?: Sanitizer, rendererFactory?: RendererFactory3} = {}) {
     super();
     this.requestAnimationFrame = function(fn: () => void) {
       requestAnimationFrame.queue.push(fn);
@@ -119,7 +119,8 @@ export class ComponentFixture<T> extends BaseFixture {
       host: this.hostElement,
       scheduler: this.requestAnimationFrame,
       injector: opts.injector,
-      sanitizer: opts.sanitizer
+      sanitizer: opts.sanitizer,
+      rendererFactory: opts.rendererFactory || domRendererFactory3
     });
   }
 
@@ -134,7 +135,7 @@ export class ComponentFixture<T> extends BaseFixture {
 // Fixtures above are preferred way of testing Components and Templates
 ///////////////////////////////////////////////////////////////////////////////////
 
-export const document = ((global || window) as any).document;
+export const document = ((typeof global == 'object' && global || window) as any).document;
 export let containerEl: HTMLElement = null !;
 let host: LElementNode|null;
 const isRenderer2 =

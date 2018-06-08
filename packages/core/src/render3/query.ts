@@ -15,9 +15,9 @@ import {QueryList as viewEngine_QueryList} from '../linker/query_list';
 import {Type} from '../type';
 import {getSymbolIterator} from '../util';
 
-import {assertEqual, assertNotNull} from './assert';
+import {assertDefined, assertEqual} from './assert';
 import {ReadFromInjectorFn, getOrCreateNodeInjectorForNode} from './di';
-import {assertPreviousIsParent, getCurrentQueries, store} from './instructions';
+import {assertPreviousIsParent, getCurrentQueries, store, storeCleanupWithContext} from './instructions';
 import {DirectiveDef, unusedValueExportToPlacateAjd as unused1} from './interfaces/definition';
 import {LInjector, unusedValueExportToPlacateAjd as unused2} from './interfaces/injector';
 import {LContainerNode, LElementNode, LNode, TNode, TNodeFlags, unusedValueExportToPlacateAjd as unused3} from './interfaces/node';
@@ -163,7 +163,7 @@ export class LQueries_ implements LQueries {
     let query = this.deep;
     while (query) {
       ngDevMode &&
-          assertNotNull(
+          assertDefined(
               query.containerValues, 'View queries need to have a pointer to container values.');
       query.containerValues !.splice(index, 0, query.values);
       query = query.next;
@@ -179,7 +179,7 @@ export class LQueries_ implements LQueries {
     let query = this.deep;
     while (query) {
       ngDevMode &&
-          assertNotNull(
+          assertDefined(
               query.containerValues, 'View queries need to have a pointer to container values.');
       const removed = query.containerValues !.splice(index, 1);
 
@@ -273,7 +273,7 @@ function add(query: LQuery<any>| null, node: LNode) {
         if (directiveIdx !== null) {
           // a node is matching a predicate - determine what to read
           // note that queries using name selector must specify read strategy
-          ngDevMode && assertNotNull(predicate.read, 'the node should have a predicate');
+          ngDevMode && assertDefined(predicate.read, 'the node should have a predicate');
           const result = readFromNodeInjector(nodeInjector, node, predicate.read !, directiveIdx);
           if (result !== null) {
             addMatch(query, result);
@@ -416,7 +416,7 @@ export function query<T>(
   const queryList = new QueryList<T>();
   const queries = getCurrentQueries(LQueries_);
   queries.track(queryList, predicate, descend, read);
-
+  storeCleanupWithContext(undefined, queryList, queryList.destroy);
   if (memoryIndex != null) {
     store(memoryIndex, queryList);
   }

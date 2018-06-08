@@ -7,15 +7,18 @@
  */
 
 import {NgForOfContext} from '@angular/common';
+import {TemplateRef, ViewContainerRef} from '@angular/core';
 
-import {QUERY_READ_CONTAINER_REF, QUERY_READ_ELEMENT_REF, QUERY_READ_FROM_NODE, QUERY_READ_TEMPLATE_REF} from '../../src/render3/di';
-import {QueryList, defineComponent, detectChanges} from '../../src/render3/index';
+import {EventEmitter} from '../..';
+import {QUERY_READ_CONTAINER_REF, QUERY_READ_ELEMENT_REF, QUERY_READ_FROM_NODE, QUERY_READ_TEMPLATE_REF, getOrCreateNodeInjectorForNode, getOrCreateTemplateRef} from '../../src/render3/di';
+import {AttributeMarker, QueryList, defineComponent, defineDirective, detectChanges, injectViewContainerRef} from '../../src/render3/index';
 import {bind, container, containerRefreshEnd, containerRefreshStart, elementEnd, elementProperty, elementStart, embeddedViewEnd, embeddedViewStart, load, loadDirective} from '../../src/render3/instructions';
 import {RenderFlags} from '../../src/render3/interfaces/definition';
 import {query, queryRefresh} from '../../src/render3/query';
 
 import {NgForOf, NgIf} from './common_with_def';
-import {ComponentFixture, createComponent, createDirective, renderComponent} from './render_util';
+import {ComponentFixture, TemplateFixture, createComponent, createDirective, renderComponent} from './render_util';
+
 
 
 /**
@@ -690,6 +693,29 @@ describe('query', () => {
 
     describe('ViewContainerRef', () => {
 
+      let directiveInstance: ViewContainerManipulatorDirective|null = null;
+
+      class ViewContainerManipulatorDirective {
+        static ngDirectiveDef = defineDirective({
+          type: ViewContainerManipulatorDirective,
+          selectors: [['', 'vc', '']],
+          factory: () => {
+            return directiveInstance =
+                       new ViewContainerManipulatorDirective(injectViewContainerRef());
+          }
+        });
+
+        constructor(private _vcRef: ViewContainerRef) {}
+
+        insertTpl(tpl: TemplateRef<{}>, ctx: {}, idx?: number) {
+          this._vcRef.createEmbeddedView(tpl, ctx, idx);
+        }
+
+        remove(index?: number) { this._vcRef.remove(index); }
+      }
+
+      beforeEach(() => { directiveInstance = null; });
+
       it('should report results in views inserted / removed by ngIf', () => {
 
         /**
@@ -782,6 +808,97 @@ describe('query', () => {
 
       });
 
+      // https://stackblitz.com/edit/angular-rrmmuf?file=src/app/app.component.ts
+      it('should report results when different instances of TemplateRef are inserted into one ViewContainerRefs',
+         () => {
+           let tpl1: TemplateRef<{}>;
+           let tpl2: TemplateRef<{}>;
+
+
+           /**
+            * <ng-template #tpl1 let-idx="idx">
+            *   <div #foo [id]="'foo1_'+idx"></div>
+            * </ng-template>
+            *
+            * <div #foo id="middle"></div>
+            *
+            * <ng-template #tpl2 let-idx="idx">
+            *   <div #foo [id]="'foo2_'+idx"></div>
+            * </ng-template>
+            *
+            * <ng-template viewInserter #vi="vi"></ng-template>
+            */
+           const Cmpt = createComponent('cmpt', function(rf: RenderFlags, ctx: any) {
+             let tmp: any;
+             if (rf & RenderFlags.Create) {
+               query(0, ['foo'], true, QUERY_READ_FROM_NODE);
+
+               container(1, (rf: RenderFlags, ctx: {idx: number}) => {
+                 if (rf & RenderFlags.Create) {
+                   elementStart(0, 'div', null, ['foo', '']);
+                   elementEnd();
+                 }
+                 if (rf & RenderFlags.Update) {
+                   elementProperty(0, 'id', bind('foo1_' + ctx.idx));
+                 }
+               }, null, []);
+
+               elementStart(2, 'div', ['id', 'middle'], ['foo', '']);
+               elementEnd();
+
+               container(4, (rf: RenderFlags, ctx: {idx: number}) => {
+                 if (rf & RenderFlags.Create) {
+                   elementStart(0, 'div', null, ['foo', '']);
+                   elementEnd();
+                 }
+                 if (rf & RenderFlags.Update) {
+                   elementProperty(0, 'id', bind('foo2_' + ctx.idx));
+                 }
+               }, null, []);
+
+               container(5, undefined, null, [AttributeMarker.SELECT_ONLY, 'vc']);
+             }
+
+             if (rf & RenderFlags.Update) {
+               tpl1 = getOrCreateTemplateRef(getOrCreateNodeInjectorForNode(load(1)));
+               tpl2 = getOrCreateTemplateRef(getOrCreateNodeInjectorForNode(load(4)));
+               queryRefresh(tmp = load<QueryList<any>>(0)) && (ctx.query = tmp as QueryList<any>);
+             }
+
+           }, [ViewContainerManipulatorDirective]);
+
+           const fixture = new ComponentFixture(Cmpt);
+           const qList = fixture.component.query;
+
+           expect(qList.length).toBe(1);
+           expect(qList.first.nativeElement.getAttribute('id')).toBe('middle');
+
+           directiveInstance !.insertTpl(tpl1 !, {idx: 0}, 0);
+           directiveInstance !.insertTpl(tpl2 !, {idx: 1}, 1);
+           fixture.update();
+           expect(qList.length).toBe(3);
+           let qListArr = qList.toArray();
+           expect(qListArr[0].nativeElement.getAttribute('id')).toBe('foo1_0');
+           expect(qListArr[1].nativeElement.getAttribute('id')).toBe('middle');
+           expect(qListArr[2].nativeElement.getAttribute('id')).toBe('foo2_1');
+
+           directiveInstance !.insertTpl(tpl1 !, {idx: 1}, 1);
+           fixture.update();
+           expect(qList.length).toBe(4);
+           qListArr = qList.toArray();
+           expect(qListArr[0].nativeElement.getAttribute('id')).toBe('foo1_0');
+           expect(qListArr[1].nativeElement.getAttribute('id')).toBe('foo1_1');
+           expect(qListArr[2].nativeElement.getAttribute('id')).toBe('middle');
+           expect(qListArr[3].nativeElement.getAttribute('id')).toBe('foo2_1');
+
+           directiveInstance !.remove(1);
+           fixture.update();
+           expect(qList.length).toBe(3);
+           qListArr = qList.toArray();
+           expect(qListArr[0].nativeElement.getAttribute('id')).toBe('foo1_0');
+           expect(qListArr[1].nativeElement.getAttribute('id')).toBe('middle');
+           expect(qListArr[2].nativeElement.getAttribute('id')).toBe('foo2_1');
+         });
     });
 
     describe('JS blocks', () => {
@@ -1120,5 +1237,59 @@ describe('query', () => {
       expect(changes).toBe(2);
     });
 
+  });
+
+  describe('queryList', () => {
+    it('should be destroyed when the containing view is destroyed', () => {
+      let queryInstance: QueryList<any>;
+
+      const SimpleComponentWithQuery =
+          createComponent('some-component-with-query', function(rf: RenderFlags, ctx: any) {
+            let tmp: any;
+            if (rf & RenderFlags.Create) {
+              query(0, ['foo'], false, QUERY_READ_FROM_NODE);
+              elementStart(1, 'div', null, ['foo', '']);
+              elementEnd();
+            }
+            if (rf & RenderFlags.Update) {
+              queryRefresh(tmp = load<QueryList<any>>(0)) &&
+                  (ctx.query = queryInstance = tmp as QueryList<any>);
+            }
+          });
+
+      function createTemplate() { container(0); }
+
+      function updateTemplate() {
+        containerRefreshStart(0);
+        {
+          if (condition) {
+            let rf1 = embeddedViewStart(1);
+            {
+              if (rf1 & RenderFlags.Create) {
+                elementStart(0, 'some-component-with-query');
+                elementEnd();
+              }
+            }
+            embeddedViewEnd();
+          }
+        }
+        containerRefreshEnd();
+      }
+
+      /**
+       * % if (condition) {
+       *   <some-component-with-query></some-component-with-query>
+       * %}
+       */
+      let condition = true;
+      const t = new TemplateFixture(createTemplate, updateTemplate, [SimpleComponentWithQuery]);
+      expect(t.html).toEqual('<some-component-with-query><div></div></some-component-with-query>');
+      expect((queryInstance !.changes as EventEmitter<any>).closed).toBeFalsy();
+
+      condition = false;
+      t.update();
+      expect(t.html).toEqual('');
+      expect((queryInstance !.changes as EventEmitter<any>).closed).toBeTruthy();
+    });
   });
 });
