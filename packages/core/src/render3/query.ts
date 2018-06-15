@@ -18,7 +18,7 @@ import {getSymbolIterator} from '../util';
 import {assertDefined, assertEqual} from './assert';
 import {ReadFromInjectorFn, getOrCreateNodeInjectorForNode} from './di';
 import {assertPreviousIsParent, getCurrentQueries, store, storeCleanupWithContext} from './instructions';
-import {DirectiveDef, unusedValueExportToPlacateAjd as unused1} from './interfaces/definition';
+import {DirectiveDefInternal, unusedValueExportToPlacateAjd as unused1} from './interfaces/definition';
 import {LInjector, unusedValueExportToPlacateAjd as unused2} from './interfaces/injector';
 import {LContainerNode, LElementNode, LNode, TNode, TNodeFlags, unusedValueExportToPlacateAjd as unused3} from './interfaces/node';
 import {LQueries, QueryReadType, unusedValueExportToPlacateAjd as unused4} from './interfaces/query';
@@ -176,13 +176,16 @@ export class LQueries_ implements LQueries {
     add(this.deep, node);
   }
 
-  removeView(index: number): void {
+  removeView(): void {
     let query = this.deep;
     while (query) {
       ngDevMode &&
           assertDefined(
               query.containerValues, 'View queries need to have a pointer to container values.');
-      const removed = query.containerValues !.splice(index, 1);
+
+      const containerValues = query.containerValues !;
+      const viewValuesIdx = containerValues.indexOf(query.values);
+      const removed = containerValues.splice(viewValuesIdx, 1);
 
       // mark a query as dirty only when removed view had matching modes
       ngDevMode && assertEqual(removed.length, 1, 'removed.length');
@@ -229,7 +232,7 @@ function getIdxOfMatchingDirective(node: LNode, type: Type<any>): number|null {
   const start = flags >> TNodeFlags.DirectiveStartingIndexShift;
   const end = start + count;
   for (let i = start; i < end; i++) {
-    const def = defs[i] as DirectiveDef<any>;
+    const def = defs[i] as DirectiveDefInternal<any>;
     if (def.type === type && def.diPublic) {
       return i;
     }

@@ -357,32 +357,44 @@ export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver
       this.addNamespaceInstruction(currentNamespace, element);
     }
 
-    this.instruction(
-        this._creationCode, element.sourceSpan, R3.createElement, ...trimTrailingNulls(parameters));
+    const isEmptyElement = element.children.length === 0 && element.outputs.length === 0;
 
     const implicit = o.variable(CONTEXT_NAME);
 
-    // Generate Listeners (outputs)
-    element.outputs.forEach((outputAst: t.BoundEvent) => {
-      const elName = sanitizeIdentifier(element.name);
-      const evName = sanitizeIdentifier(outputAst.name);
-      const functionName = `${this.templateName}_${elName}_${evName}_listener`;
-      const localVars: o.Statement[] = [];
-      const bindingScope =
-          this._bindingScope.nestedScope((lhsVar: o.ReadVarExpr, rhsExpression: o.Expression) => {
-            localVars.push(
-                lhsVar.set(rhsExpression).toDeclStmt(o.INFERRED_TYPE, [o.StmtModifier.Final]));
-          });
-      const bindingExpr = convertActionBinding(
-          bindingScope, implicit, outputAst.handler, 'b', () => error('Unexpected interpolation'));
-      const handler = o.fn(
-          [new o.FnParam('$event', o.DYNAMIC_TYPE)], [...localVars, ...bindingExpr.render3Stmts],
-          o.INFERRED_TYPE, null, functionName);
+    if (isEmptyElement) {
       this.instruction(
-          this._creationCode, outputAst.sourceSpan, R3.listener, o.literal(outputAst.name),
-          handler);
-    });
+          this._creationCode, element.sourceSpan, R3.element, ...trimTrailingNulls(parameters));
+    } else {
+      // Generate the instruction create element instruction
+      if (i18nMessages.length > 0) {
+        this._creationCode.push(...i18nMessages);
+      }
+      this.instruction(
+          this._creationCode, element.sourceSpan, R3.elementStart,
+          ...trimTrailingNulls(parameters));
 
+      // Generate Listeners (outputs)
+      element.outputs.forEach((outputAst: t.BoundEvent) => {
+        const elName = sanitizeIdentifier(element.name);
+        const evName = sanitizeIdentifier(outputAst.name);
+        const functionName = `${this.templateName}_${elName}_${evName}_listener`;
+        const localVars: o.Statement[] = [];
+        const bindingScope =
+            this._bindingScope.nestedScope((lhsVar: o.ReadVarExpr, rhsExpression: o.Expression) => {
+              localVars.push(
+                  lhsVar.set(rhsExpression).toDeclStmt(o.INFERRED_TYPE, [o.StmtModifier.Final]));
+            });
+        const bindingExpr = convertActionBinding(
+            bindingScope, implicit, outputAst.handler, 'b',
+            () => error('Unexpected interpolation'));
+        const handler = o.fn(
+            [new o.FnParam('$event', o.DYNAMIC_TYPE)], [...localVars, ...bindingExpr.render3Stmts],
+            o.INFERRED_TYPE, null, functionName);
+        this.instruction(
+            this._creationCode, outputAst.sourceSpan, R3.listener, o.literal(outputAst.name),
+            handler);
+      });
+    }
 
     // Generate element input bindings
     element.inputs.forEach((input: t.BoundAttribute) => {
@@ -422,9 +434,11 @@ export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver
       t.visitAll(this, element.children);
     }
 
-    // Finish element construction mode.
-    this.instruction(
-        this._creationCode, element.endSourceSpan || element.sourceSpan, R3.elementEnd);
+    if (!isEmptyElement) {
+      // Finish element construction mode.
+      this.instruction(
+          this._creationCode, element.endSourceSpan || element.sourceSpan, R3.elementEnd);
+    }
 
     // Restore the state before exiting this node
     this._inI18nSection = wasInI18nSection;
@@ -835,7 +849,7 @@ function interpolate(args: o.Expression[]): o.Expression {
  * @param templateUrl URL to use for source mapping of the parsed template
  */
 export function parseTemplate(
-    template: string, templateUrl: string, options: {preserveWhitespace?: boolean} = {}):
+    template: string, templateUrl: string, options: {preserveWhitespaces?: boolean} = {}):
     {errors?: ParseError[], nodes: t.Node[], hasNgContent: boolean, ngContentSelectors: string[]} {
   const bindingParser = makeBindingParser();
   const htmlParser = new HtmlParser();
@@ -846,7 +860,7 @@ export function parseTemplate(
   }
 
   let rootNodes: html.Node[] = parseResult.rootNodes;
-  if (!options.preserveWhitespace) {
+  if (!options.preserveWhitespaces) {
     rootNodes = html.visitAll(new WhitespaceVisitor(), rootNodes);
   }
 

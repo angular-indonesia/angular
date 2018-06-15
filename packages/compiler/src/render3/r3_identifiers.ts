@@ -23,7 +23,9 @@ export class Identifiers {
 
   static namespaceSVG: o.ExternalReference = {name: 'ɵNS', moduleName: CORE};
 
-  static createElement: o.ExternalReference = {name: 'ɵE', moduleName: CORE};
+  static element: o.ExternalReference = {name: 'ɵEe', moduleName: CORE};
+
+  static elementStart: o.ExternalReference = {name: 'ɵE', moduleName: CORE};
 
   static elementEnd: o.ExternalReference = {name: 'ɵe', moduleName: CORE};
 
@@ -82,10 +84,6 @@ export class Identifiers {
   static projection: o.ExternalReference = {name: 'ɵP', moduleName: CORE};
   static projectionDef: o.ExternalReference = {name: 'ɵpD', moduleName: CORE};
 
-  static refreshComponent: o.ExternalReference = {name: 'ɵr', moduleName: CORE};
-
-  static directiveLifeCycle: o.ExternalReference = {name: 'ɵl', moduleName: CORE};
-
   static inject: o.ExternalReference = {name: 'inject', moduleName: CORE};
 
   static injectAttribute: o.ExternalReference = {name: 'ɵinjectAttribute', moduleName: CORE};
@@ -118,6 +116,11 @@ export class Identifiers {
 
   static defineInjector: o.ExternalReference = {
     name: 'defineInjector',
+    moduleName: CORE,
+  };
+
+  static NgModuleDef: o.ExternalReference = {
+    name: 'NgModuleDef',
     moduleName: CORE,
   };
 
