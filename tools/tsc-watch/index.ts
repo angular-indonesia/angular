@@ -7,10 +7,9 @@
  */
 
 /* tslint:disable:no-console  */
-import {spawn} from 'child_process';
-import {existsSync, mkdirSync, writeFileSync} from 'fs';
+import {existsSync, mkdirSync} from 'fs';
 
-import {TSC, TscWatch, reportError} from './tsc_watch';
+import {TscWatch} from './tsc_watch';
 
 export * from './tsc_watch';
 import 'reflect-metadata';
@@ -40,10 +39,7 @@ const BaseConfig = {
 };
 
 if (platform == 'node') {
-  const specFiles = [
-    '@angular/**/*_spec.js', '@angular/compiler-cli/test/**/*_spec.js',
-    '@angular/benchpress/test/**/*_spec.js'
-  ];
+  const specFiles = ['@angular/**/*_spec.js'];
   tscWatch = new TscWatch(Object.assign(
       {
         tsconfig: 'packages/tsconfig.json',
