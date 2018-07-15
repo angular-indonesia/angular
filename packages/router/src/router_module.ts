@@ -25,7 +25,7 @@ import {NoPreloading, PreloadAllModules, PreloadingStrategy, RouterPreloader} fr
 import {RouterScroller} from './router_scroller';
 import {ActivatedRoute} from './router_state';
 import {UrlHandlingStrategy} from './url_handling_strategy';
-import {DefaultUrlSerializer, UrlSerializer} from './url_tree';
+import {DefaultUrlSerializer, UrlSerializer, UrlTree} from './url_tree';
 import {flatten} from './utils/collection';
 
 
@@ -393,6 +393,30 @@ export interface ExtraOptions {
    * - `'always'`, enables unconditional inheritance of parent params.
    */
   paramsInheritanceStrategy?: 'emptyOnly'|'always';
+
+  /**
+   * A custom malformed uri error handler function. This handler is invoked when encodedURI contains
+   * invalid character sequences. The default implementation is to redirect to the root url dropping
+   * any path or param info. This function passes three parameters:
+   *
+   * - `'URIError'` - Error thrown when parsing a bad URL
+   * - `'UrlSerializer'` - UrlSerializer that’s configured with the router.
+   * - `'url'` -  The malformed URL that caused the URIError
+   * */
+  malformedUriErrorHandler?:
+      (error: URIError, urlSerializer: UrlSerializer, url: string) => UrlTree;
+
+  /**
+   * Defines when the router updates the browser URL. The default behavior is to update after
+   * successful navigation. However, some applications may prefer a mode where the URL gets
+   * updated at the beginning of navigation. The most common use case would be updating the
+   * URL early so if navigation fails, you can show an error message with the URL that failed.
+   * Available options are:
+   *
+   * - `'deferred'`, the default, updates the browser URL after navigation has finished.
+   * - `'eager'`, updates browser URL at the beginning of navigation.
+   */
+  urlUpdateStrategy?: 'deferred'|'eager';
 }
 
 export function setupRouter(
@@ -415,6 +439,10 @@ export function setupRouter(
     router.errorHandler = opts.errorHandler;
   }
 
+  if (opts.malformedUriErrorHandler) {
+    router.malformedUriErrorHandler = opts.malformedUriErrorHandler;
+  }
+
   if (opts.enableTracing) {
     const dom = getDOM();
     router.events.subscribe((e: RouterEvent) => {
@@ -431,6 +459,10 @@ export function setupRouter(
 
   if (opts.paramsInheritanceStrategy) {
     router.paramsInheritanceStrategy = opts.paramsInheritanceStrategy;
+  }
+
+  if (opts.urlUpdateStrategy) {
+    router.urlUpdateStrategy = opts.urlUpdateStrategy;
   }
 
   return router;

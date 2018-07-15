@@ -115,11 +115,13 @@ export interface ExtraOptions {
     enableTracing?: boolean;
     errorHandler?: ErrorHandler;
     initialNavigation?: InitialNavigation;
+    malformedUriErrorHandler?: (error: URIError, urlSerializer: UrlSerializer, url: string) => UrlTree;
     onSameUrlNavigation?: 'reload' | 'ignore';
     paramsInheritanceStrategy?: 'emptyOnly' | 'always';
     preloadingStrategy?: any;
     scrollOffset?: [number, number] | (() => [number, number]);
     scrollPositionRestoration?: 'disabled' | 'enabled' | 'top';
+    urlUpdateStrategy?: 'deferred' | 'eager';
     useHash?: boolean;
 }
 
@@ -314,6 +316,7 @@ export declare class Router {
     config: Routes;
     errorHandler: ErrorHandler;
     readonly events: Observable<Event>;
+    malformedUriErrorHandler: (error: URIError, urlSerializer: UrlSerializer, url: string) => UrlTree;
     navigated: boolean;
     onSameUrlNavigation: 'reload' | 'ignore';
     paramsInheritanceStrategy: 'emptyOnly' | 'always';
@@ -321,6 +324,7 @@ export declare class Router {
     readonly routerState: RouterState;
     readonly url: string;
     urlHandlingStrategy: UrlHandlingStrategy;
+    urlUpdateStrategy: 'deferred' | 'eager';
     constructor(rootComponentType: Type<any> | null, urlSerializer: UrlSerializer, rootContexts: ChildrenOutletContexts, location: Location, injector: Injector, loader: NgModuleFactoryLoader, compiler: Compiler, config: Routes);
     createUrlTree(commands: any[], navigationExtras?: NavigationExtras): UrlTree;
     dispose(): void;
