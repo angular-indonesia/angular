@@ -8,7 +8,7 @@
 
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, ContentChild, ContentChildren, Directive, HostBinding, HostListener, Injectable, Input, NgModule, OnDestroy, Optional, Pipe, PipeTransform, QueryList, SimpleChanges, TemplateRef, ViewChild, ViewChildren, ViewContainerRef} from '../../../src/core';
 import * as $r3$ from '../../../src/core_render3_private_export';
-import {ComponentDefInternal} from '../../../src/render3/interfaces/definition';
+import {ComponentDef} from '../../../src/render3/interfaces/definition';
 import {renderComponent, toHtml} from '../render_util';
 
 
@@ -54,6 +54,8 @@ describe('queries', () => {
         type: ViewQueryComponent,
         selectors: [['view-query-component']],
         factory: function ViewQueryComponent_Factory() { return new ViewQueryComponent(); },
+        consts: 3,
+        vars: 0,
         template: function ViewQueryComponent_Template(
             rf: $RenderFlags$, ctx: $ViewQueryComponent$) {
           if (rf & 1) {
@@ -78,7 +80,7 @@ describe('queries', () => {
     }
 
     // NON-NORMATIVE
-    (ViewQueryComponent.ngComponentDef as ComponentDefInternal<any>).directiveDefs =
+    (ViewQueryComponent.ngComponentDef as ComponentDef<any>).directiveDefs =
         [SomeDirective.ngDirectiveDef];
     // /NON-NORMATIVE
 
@@ -110,6 +112,8 @@ describe('queries', () => {
         type: ContentQueryComponent,
         selectors: [['content-query-component']],
         factory: function ContentQueryComponent_Factory() { return new ContentQueryComponent(); },
+        consts: 2,
+        vars: 0,
         contentQueries: function ContentQueryComponent_ContentQueries() {
           $r3$.ɵregisterContentQuery($r3$.ɵquery(null, SomeDirective, false));
           $r3$.ɵregisterContentQuery($r3$.ɵquery(null, SomeDirective, false));
@@ -152,6 +156,8 @@ describe('queries', () => {
         type: MyApp,
         selectors: [['my-app']],
         factory: function MyApp_Factory() { return new MyApp(); },
+        consts: 2,
+        vars: 0,
         template: function MyApp_Template(rf: $RenderFlags$, ctx: $MyApp$) {
           if (rf & 1) {
             $r3$.ɵelementStart(0, 'content-query-component');
@@ -165,7 +171,7 @@ describe('queries', () => {
     }
 
     // NON-NORMATIVE
-    (MyApp.ngComponentDef as ComponentDefInternal<any>).directiveDefs =
+    (MyApp.ngComponentDef as ComponentDef<any>).directiveDefs =
         [ContentQueryComponent.ngComponentDef, SomeDirective.ngDirectiveDef];
     // /NON-NORMATIVE
 

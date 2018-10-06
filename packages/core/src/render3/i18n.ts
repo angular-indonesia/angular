@@ -7,11 +7,11 @@
  */
 
 import {assertEqual, assertLessThan} from './assert';
-import {NO_CHANGE, _getViewData, bindingUpdated, bindingUpdated2, bindingUpdated4, createLNode, getPreviousOrParentNode, getRenderer, load, resetApplicationState} from './instructions';
+import {NO_CHANGE, _getViewData, adjustBlueprintForNewNode, bindingUpdated, bindingUpdated2, bindingUpdated3, bindingUpdated4, createNodeAtIndex, getRenderer, getTNode, load, loadElement, resetComponentState} from './instructions';
 import {RENDER_PARENT} from './interfaces/container';
-import {LContainerNode, LNode, TContainerNode, TElementNode, TNodeType} from './interfaces/node';
-import {BINDING_INDEX, HEADER_OFFSET, TVIEW} from './interfaces/view';
-import {appendChild, createTextNode, getParentLNode, removeChild} from './node_manipulation';
+import {LContainerNode, LNode, TElementNode, TNode, TNodeType} from './interfaces/node';
+import {BINDING_INDEX, HEADER_OFFSET, HOST_NODE, TVIEW} from './interfaces/view';
+import {appendChild, createTextNode, removeChild} from './node_manipulation';
 import {stringify} from './util';
 
 /**
@@ -245,42 +245,42 @@ function generateMappingInstructions(
   return partIndex;
 }
 
-function appendI18nNode(node: LNode, parentNode: LNode, previousNode: LNode) {
+// TODO: Remove LNode arg when we remove dynamicContainerNode
+function appendI18nNode(
+    node: LNode, tNode: TNode, parentTNode: TNode, previousTNode: TNode): TNode {
   if (ngDevMode) {
     ngDevMode.rendererMoveNode++;
   }
 
   const viewData = _getViewData();
 
-  appendChild(parentNode, node.native || null, viewData);
-
   // On first pass, re-organize node tree to put this node in the correct position.
-  const firstTemplatePass = node.view[TVIEW].firstTemplatePass;
+  const firstTemplatePass = viewData[TVIEW].firstTemplatePass;
   if (firstTemplatePass) {
-    if (previousNode === parentNode && node.tNode !== parentNode.tNode.child) {
-      node.tNode.next = parentNode.tNode.child;
-      parentNode.tNode.child = node.tNode;
-    } else if (previousNode !== parentNode && node.tNode !== previousNode.tNode.next) {
-      node.tNode.next = previousNode.tNode.next;
-      previousNode.tNode.next = node.tNode;
+    if (previousTNode === parentTNode && tNode !== parentTNode.child) {
+      tNode.next = parentTNode.child;
+      parentTNode.child = tNode;
+    } else if (previousTNode !== parentTNode && tNode !== previousTNode.next) {
+      tNode.next = previousTNode.next;
+      previousTNode.next = tNode;
     } else {
-      node.tNode.next = null;
+      tNode.next = null;
     }
 
-    if (parentNode.view === node.view) node.tNode.parent = parentNode.tNode as TElementNode;
+    if (parentTNode !== viewData[HOST_NODE]) {
+      tNode.parent = parentTNode as TElementNode;
+    }
   }
+
+  appendChild(node.native, tNode, viewData);
 
   // Template containers also have a comment node for the `ViewContainerRef` that should be moved
-  if (node.tNode.type === TNodeType.Container && node.dynamicLContainerNode) {
-    appendChild(parentNode, node.dynamicLContainerNode.native || null, viewData);
-    if (firstTemplatePass) {
-      node.tNode.dynamicContainerNode = node.dynamicLContainerNode.tNode;
-      node.dynamicLContainerNode.tNode.parent = node.tNode as TContainerNode;
-    }
-    return node.dynamicLContainerNode;
+  if (tNode.type === TNodeType.Container && node.dynamicLContainerNode) {
+    appendChild(node.dynamicLContainerNode.native, tNode, viewData);
+    return tNode.dynamicContainerNode !;
   }
 
-  return node;
+  return tNode;
 }
 
 /**
@@ -293,7 +293,9 @@ function appendI18nNode(node: LNode, parentNode: LNode, previousNode: LNode) {
 export function i18nApply(startIndex: number, instructions: I18nInstruction[]): void {
   const viewData = _getViewData();
   if (ngDevMode) {
-    assertEqual(viewData[BINDING_INDEX], -1, 'i18nApply should be called before any binding');
+    assertEqual(
+        viewData[BINDING_INDEX], viewData[TVIEW].bindingStartIndex,
+        'i18nApply should be called before any binding');
   }
 
   if (!instructions) {
@@ -301,23 +303,29 @@ export function i18nApply(startIndex: number, instructions: I18nInstruction[]): 
   }
 
   const renderer = getRenderer();
-  let localParentNode: LNode = getParentLNode(load(startIndex)) || getPreviousOrParentNode();
-  let localPreviousNode: LNode = localParentNode;
-  resetApplicationState();  // We don't want to add to the tree with the wrong previous node
+  const startTNode = getTNode(startIndex);
+  let localParentTNode: TNode = startTNode.parent || viewData[HOST_NODE] !;
+  let localPreviousTNode: TNode = localParentTNode;
+  resetComponentState();  // We don't want to add to the tree with the wrong previous node
 
   for (let i = 0; i < instructions.length; i++) {
     const instruction = instructions[i] as number;
     switch (instruction & I18nInstructions.InstructionMask) {
       case I18nInstructions.Element:
-        const element: LNode = load(instruction & I18nInstructions.IndexMask);
-        localPreviousNode = appendI18nNode(element, localParentNode, localPreviousNode);
-        localParentNode = element;
+        const elementIndex = instruction & I18nInstructions.IndexMask;
+        const element: LNode = load(elementIndex);
+        const elementTNode = getTNode(elementIndex);
+        localPreviousTNode =
+            appendI18nNode(element, elementTNode, localParentTNode, localPreviousTNode);
+        localParentTNode = elementTNode;
         break;
       case I18nInstructions.Expression:
       case I18nInstructions.TemplateRoot:
       case I18nInstructions.Any:
-        const node: LNode = load(instruction & I18nInstructions.IndexMask);
-        localPreviousNode = appendI18nNode(node, localParentNode, localPreviousNode);
+        const nodeIndex = instruction & I18nInstructions.IndexMask;
+        const node: LNode = load(nodeIndex);
+        localPreviousTNode =
+            appendI18nNode(node, getTNode(nodeIndex), localParentTNode, localPreviousTNode);
         break;
       case I18nInstructions.Text:
         if (ngDevMode) {
@@ -327,29 +335,32 @@ export function i18nApply(startIndex: number, instructions: I18nInstruction[]): 
         const textRNode = createTextNode(value, renderer);
         // If we were to only create a `RNode` then projections won't move the text.
         // Create text node at the current end of viewData. Must subtract header offset because
-        // createLNode takes a raw index (not adjusted by header offset).
-        const textLNode =
-            createLNode(viewData.length - HEADER_OFFSET, TNodeType.Element, textRNode, null, null);
-        localPreviousNode = appendI18nNode(textLNode, localParentNode, localPreviousNode);
-        resetApplicationState();
+        // createNodeAtIndex takes a raw index (not adjusted by header offset).
+        adjustBlueprintForNewNode(viewData);
+        const lastNodeIndex = viewData.length - 1 - HEADER_OFFSET;
+        const textTNode =
+            createNodeAtIndex(lastNodeIndex, TNodeType.Element, textRNode, null, null);
+        localPreviousTNode = appendI18nNode(
+            loadElement(lastNodeIndex), textTNode, localParentTNode, localPreviousTNode);
+        resetComponentState();
         break;
       case I18nInstructions.CloseNode:
-        localPreviousNode = localParentNode;
-        localParentNode = getParentLNode(localParentNode) !;
+        localPreviousTNode = localParentTNode;
+        localParentTNode = localParentTNode.parent || viewData[HOST_NODE] !;
         break;
       case I18nInstructions.RemoveNode:
         if (ngDevMode) {
           ngDevMode.rendererRemoveNode++;
         }
-        const index = instruction & I18nInstructions.IndexMask;
-        const removedNode: LNode|LContainerNode = load(index);
-        const parentNode = getParentLNode(removedNode) !;
-        removeChild(parentNode, removedNode.native || null, viewData);
+        const removeIndex = instruction & I18nInstructions.IndexMask;
+        const removedNode: LNode|LContainerNode = load(removeIndex);
+        const removedTNode = getTNode(removeIndex);
+        removeChild(removedTNode, removedNode.native || null, viewData);
 
         // For template containers we also need to remove their `ViewContainerRef` from the DOM
-        if (removedNode.tNode.type === TNodeType.Container && removedNode.dynamicLContainerNode) {
-          removeChild(parentNode, removedNode.dynamicLContainerNode.native || null, viewData);
-          removedNode.dynamicLContainerNode.tNode.detached = true;
+        if (removedTNode.type === TNodeType.Container && removedNode.dynamicLContainerNode) {
+          removeChild(removedTNode, removedNode.dynamicLContainerNode.native || null, viewData);
+          removedTNode.dynamicContainerNode !.detached = true;
           removedNode.dynamicLContainerNode.data[RENDER_PARENT] = null;
         }
         break;
@@ -383,7 +394,7 @@ export function i18nExpMapping(
  * @returns The concatenated string when any of the arguments changes, `NO_CHANGE` otherwise.
  */
 export function i18nInterpolation1(instructions: I18nExpInstruction[], v0: any): string|NO_CHANGE {
-  const different = bindingUpdated(v0);
+  const different = bindingUpdated(_getViewData()[BINDING_INDEX]++, v0);
 
   if (!different) {
     return NO_CHANGE;
@@ -414,7 +425,9 @@ export function i18nInterpolation1(instructions: I18nExpInstruction[], v0: any):
  */
 export function i18nInterpolation2(instructions: I18nExpInstruction[], v0: any, v1: any): string|
     NO_CHANGE {
-  const different = bindingUpdated2(v0, v1);
+  const viewData = _getViewData();
+  const different = bindingUpdated2(viewData[BINDING_INDEX], v0, v1);
+  viewData[BINDING_INDEX] += 2;
 
   if (!different) {
     return NO_CHANGE;
@@ -452,8 +465,9 @@ export function i18nInterpolation2(instructions: I18nExpInstruction[], v0: any, 
  */
 export function i18nInterpolation3(
     instructions: I18nExpInstruction[], v0: any, v1: any, v2: any): string|NO_CHANGE {
-  let different = bindingUpdated2(v0, v1);
-  different = bindingUpdated(v2) || different;
+  const viewData = _getViewData();
+  const different = bindingUpdated3(viewData[BINDING_INDEX], v0, v1, v2);
+  viewData[BINDING_INDEX] += 3;
 
   if (!different) {
     return NO_CHANGE;
@@ -493,7 +507,9 @@ export function i18nInterpolation3(
  */
 export function i18nInterpolation4(
     instructions: I18nExpInstruction[], v0: any, v1: any, v2: any, v3: any): string|NO_CHANGE {
-  const different = bindingUpdated4(v0, v1, v2, v3);
+  const viewData = _getViewData();
+  const different = bindingUpdated4(viewData[BINDING_INDEX], v0, v1, v2, v3);
+  viewData[BINDING_INDEX] += 4;
 
   if (!different) {
     return NO_CHANGE;
@@ -535,8 +551,10 @@ export function i18nInterpolation4(
 export function i18nInterpolation5(
     instructions: I18nExpInstruction[], v0: any, v1: any, v2: any, v3: any, v4: any): string|
     NO_CHANGE {
-  let different = bindingUpdated4(v0, v1, v2, v3);
-  different = bindingUpdated(v4) || different;
+  const viewData = _getViewData();
+  let different = bindingUpdated4(viewData[BINDING_INDEX], v0, v1, v2, v3);
+  different = bindingUpdated(viewData[BINDING_INDEX] + 4, v4) || different;
+  viewData[BINDING_INDEX] += 5;
 
   if (!different) {
     return NO_CHANGE;
@@ -580,8 +598,10 @@ export function i18nInterpolation5(
 i18nInterpolation6(
     instructions: I18nExpInstruction[], v0: any, v1: any, v2: any, v3: any, v4: any, v5: any):
     string|NO_CHANGE {
-  let different = bindingUpdated4(v0, v1, v2, v3);
-  different = bindingUpdated2(v4, v5) || different;
+  const viewData = _getViewData();
+  let different = bindingUpdated4(viewData[BINDING_INDEX], v0, v1, v2, v3);
+  different = bindingUpdated2(viewData[BINDING_INDEX] + 4, v4, v5) || different;
+  viewData[BINDING_INDEX] += 6;
 
   if (!different) {
     return NO_CHANGE;
@@ -626,9 +646,10 @@ i18nInterpolation6(
 export function i18nInterpolation7(
     instructions: I18nExpInstruction[], v0: any, v1: any, v2: any, v3: any, v4: any, v5: any,
     v6: any): string|NO_CHANGE {
-  let different = bindingUpdated4(v0, v1, v2, v3);
-  different = bindingUpdated2(v4, v5) || different;
-  different = bindingUpdated(v6) || different;
+  const viewData = _getViewData();
+  let different = bindingUpdated4(viewData[BINDING_INDEX], v0, v1, v2, v3);
+  different = bindingUpdated3(viewData[BINDING_INDEX] + 4, v4, v5, v6) || different;
+  viewData[BINDING_INDEX] += 7;
 
   if (!different) {
     return NO_CHANGE;
@@ -674,8 +695,10 @@ export function i18nInterpolation7(
 export function i18nInterpolation8(
     instructions: I18nExpInstruction[], v0: any, v1: any, v2: any, v3: any, v4: any, v5: any,
     v6: any, v7: any): string|NO_CHANGE {
-  let different = bindingUpdated4(v0, v1, v2, v3);
-  different = bindingUpdated4(v4, v5, v6, v7) || different;
+  const viewData = _getViewData();
+  let different = bindingUpdated4(viewData[BINDING_INDEX], v0, v1, v2, v3);
+  different = bindingUpdated4(viewData[BINDING_INDEX] + 4, v4, v5, v6, v7) || different;
+  viewData[BINDING_INDEX] += 8;
 
   if (!different) {
     return NO_CHANGE;
@@ -713,10 +736,11 @@ export function i18nInterpolation8(
  */
 export function i18nInterpolationV(instructions: I18nExpInstruction[], values: any[]): string|
     NO_CHANGE {
+  const viewData = _getViewData();
   let different = false;
   for (let i = 0; i < values.length; i++) {
     // Check if bindings have changed
-    bindingUpdated(values[i]) && (different = true);
+    bindingUpdated(viewData[BINDING_INDEX]++, values[i]) && (different = true);
   }
 
   if (!different) {

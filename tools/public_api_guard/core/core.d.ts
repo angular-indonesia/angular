@@ -26,7 +26,7 @@ export declare const APP_ID: InjectionToken<string>;
 export declare const APP_INITIALIZER: InjectionToken<(() => void)[]>;
 
 export declare class ApplicationInitStatus {
-    readonly done: boolean;
+    readonly done = false;
     readonly donePromise: Promise<any>;
     constructor(appInits: (() => any)[]);
 }
@@ -506,7 +506,7 @@ export declare class ModuleWithComponentFactories<T> {
     constructor(ngModuleFactory: NgModuleFactory<T>, componentFactories: ComponentFactory<any>[]);
 }
 
-export interface ModuleWithProviders<T = any> {
+export interface ModuleWithProviders<T = any /** TODO(alxhub): remove default when callers pass explicit type param */> {
     ngModule: Type<T>;
     providers?: Provider[];
 }
@@ -550,7 +550,7 @@ export declare class NgZone {
     readonly onStable: EventEmitter<any>;
     readonly onUnstable: EventEmitter<any>;
     constructor({ enableLongStackTrace }: {
-        enableLongStackTrace?: boolean;
+        enableLongStackTrace?: boolean | undefined;
     });
     run<T>(fn: (...args: any[]) => T, applyThis?: any, applyArgs?: any[]): T;
     runGuarded<T>(fn: (...args: any[]) => T, applyThis?: any, applyArgs?: any[]): T;
@@ -624,7 +624,7 @@ export declare abstract class Query {
 
 export declare class QueryList<T> {
     readonly changes: Observable<any>;
-    readonly dirty: boolean;
+    readonly dirty = true;
     readonly first: T;
     readonly last: T;
     readonly length: number;
@@ -719,7 +719,7 @@ export declare abstract class Renderer2 {
     abstract removeChild(parent: any, oldChild: any): void;
     abstract removeClass(el: any, name: string): void;
     abstract removeStyle(el: any, style: string, flags?: RendererStyleFlags2): void;
-    abstract selectRootElement(selectorOrNode: string | any): any;
+    abstract selectRootElement(selectorOrNode: string | any, preserveContent?: boolean): any;
     abstract setAttribute(el: any, name: string, value: string, namespace?: string | null): void;
     abstract setProperty(el: any, name: string, value: any): void;
     abstract setStyle(el: any, style: string, value: any, flags?: RendererStyleFlags2): void;

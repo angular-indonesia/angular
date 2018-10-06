@@ -11,6 +11,7 @@ import * as path from 'path';
 import * as ts from 'typescript';
 
 import * as api from '../transformers/api';
+import {nocollapseHack} from '../transformers/nocollapse_hack';
 
 import {ComponentDecoratorHandler, DirectiveDecoratorHandler, InjectableDecoratorHandler, NgModuleDecoratorHandler, PipeDecoratorHandler, ResourceLoader, SelectorScopeRegistry} from './annotations';
 import {BaseDefDecoratorHandler} from './annotations/src/base_def';
@@ -18,6 +19,7 @@ import {FactoryGenerator, FactoryInfo, GeneratedFactoryHostWrapper, generatedFac
 import {TypeScriptReflectionHost} from './metadata';
 import {FileResourceLoader, HostResourceLoader} from './resource_loader';
 import {IvyCompilation, ivyTransformFactory} from './transform';
+import {TypeCheckContext, TypeCheckProgramHost} from './typecheck';
 
 export class NgtscProgram implements api.Program {
   private tsProgram: ts.Program;
@@ -29,11 +31,22 @@ export class NgtscProgram implements api.Program {
   private _coreImportsFrom: ts.SourceFile|null|undefined = undefined;
   private _reflector: TypeScriptReflectionHost|undefined = undefined;
   private _isCore: boolean|undefined = undefined;
+  private rootDirs: string[];
+  private closureCompilerEnabled: boolean;
 
 
   constructor(
       rootNames: ReadonlyArray<string>, private options: api.CompilerOptions,
       host: api.CompilerHost, oldProgram?: api.Program) {
+    this.rootDirs = [];
+    if (options.rootDirs !== undefined) {
+      this.rootDirs.push(...options.rootDirs);
+    } else if (options.rootDir !== undefined) {
+      this.rootDirs.push(options.rootDir);
+    } else {
+      this.rootDirs.push(host.getCurrentDirectory());
+    }
+    this.closureCompilerEnabled = !!options.annotateForClosureCompiler;
     this.resourceLoader = host.readResource !== undefined ?
         new HostResourceLoader(host.readResource.bind(host)) :
         new FileResourceLoader();
@@ -88,9 +101,16 @@ export class NgtscProgram implements api.Program {
   }
 
   getNgSemanticDiagnostics(
-      fileName?: string|undefined,
-      cancellationToken?: ts.CancellationToken|undefined): ReadonlyArray<api.Diagnostic> {
-    return [];
+      fileName?: string|undefined, cancellationToken?: ts.CancellationToken|
+                                   undefined): ReadonlyArray<ts.Diagnostic|api.Diagnostic> {
+    const compilation = this.ensureAnalyzed();
+    const diagnostics = [...compilation.diagnostics];
+    if (!!this.options.fullTemplateTypeCheck) {
+      const ctx = new TypeCheckContext();
+      compilation.typeCheck(ctx);
+      diagnostics.push(...this.compileTypeCheckProgram(ctx));
+    }
+    return diagnostics;
   }
 
   async loadNgStructureAsync(): Promise<void> {
@@ -117,6 +137,16 @@ export class NgtscProgram implements api.Program {
     throw new Error('Method not implemented.');
   }
 
+  private ensureAnalyzed(): IvyCompilation {
+    if (this.compilation === undefined) {
+      this.compilation = this.makeCompilation();
+      this.tsProgram.getSourceFiles()
+          .filter(file => !file.fileName.endsWith('.d.ts'))
+          .forEach(file => this.compilation !.analyzeSync(file));
+    }
+    return this.compilation;
+  }
+
   emit(opts?: {
     emitFlags?: api.EmitFlags,
     cancellationToken?: ts.CancellationToken,
@@ -126,12 +156,7 @@ export class NgtscProgram implements api.Program {
   }): ts.EmitResult {
     const emitCallback = opts && opts.emitCallback || defaultEmitCallback;
 
-    if (this.compilation === undefined) {
-      this.compilation = this.makeCompilation();
-      this.tsProgram.getSourceFiles()
-          .filter(file => !file.fileName.endsWith('.d.ts'))
-          .forEach(file => this.compilation !.analyzeSync(file));
-    }
+    this.ensureAnalyzed();
 
     // Since there is no .d.ts transformation API, .d.ts files are transformed during write.
     const writeFile: ts.WriteFileCallback =
@@ -140,8 +165,9 @@ export class NgtscProgram implements api.Program {
          sourceFiles: ReadonlyArray<ts.SourceFile>) => {
           if (fileName.endsWith('.d.ts')) {
             data = sourceFiles.reduce(
-                (data, sf) => this.compilation !.transformedDtsFor(sf.fileName, data, fileName),
-                data);
+                (data, sf) => this.compilation !.transformedDtsFor(sf.fileName, data), data);
+          } else if (this.closureCompilerEnabled && fileName.endsWith('.ts')) {
+            data = nocollapseHack(data);
           }
           this.host.writeFile(fileName, data, writeByteOrderMark, onError, sourceFiles);
         };
@@ -164,6 +190,17 @@ export class NgtscProgram implements api.Program {
     return emitResult;
   }
 
+  private compileTypeCheckProgram(ctx: TypeCheckContext): ReadonlyArray<ts.Diagnostic> {
+    const host = new TypeCheckProgramHost(this.tsProgram, this.host, ctx);
+    const auxProgram = ts.createProgram({
+      host,
+      rootNames: this.tsProgram.getRootFileNames(),
+      oldProgram: this.tsProgram,
+      options: this.options,
+    });
+    return auxProgram.getSemanticDiagnostics();
+  }
+
   private makeCompilation(): IvyCompilation {
     const checker = this.tsProgram.getTypeChecker();
     const scopeRegistry = new SelectorScopeRegistry(checker, this.reflector);
@@ -172,7 +209,7 @@ export class NgtscProgram implements api.Program {
     const handlers = [
       new BaseDefDecoratorHandler(checker, this.reflector),
       new ComponentDecoratorHandler(
-          checker, this.reflector, scopeRegistry, this.isCore, this.resourceLoader),
+          checker, this.reflector, scopeRegistry, this.isCore, this.resourceLoader, this.rootDirs),
       new DirectiveDecoratorHandler(checker, this.reflector, scopeRegistry, this.isCore),
       new InjectableDecoratorHandler(this.reflector, this.isCore),
       new NgModuleDecoratorHandler(checker, this.reflector, scopeRegistry, this.isCore),
