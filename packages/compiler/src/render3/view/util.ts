@@ -11,6 +11,7 @@ import * as o from '../../output/output_ast';
 import * as t from '../r3_ast';
 
 import {R3QueryMetadata} from './api';
+import {isI18nAttribute} from './i18n/util';
 
 /** Name of the temporary to use during data binding */
 export const TEMPORARY_NAME = '_t';
@@ -26,14 +27,6 @@ export const REFERENCE_PREFIX = '_r';
 
 /** The name of the implicit context reference */
 export const IMPLICIT_REFERENCE = '$implicit';
-
-/** Name of the i18n attributes **/
-export const I18N_ATTR = 'i18n';
-export const I18N_ATTR_PREFIX = 'i18n-';
-
-/** I18n separators for metadata **/
-export const MEANING_SEPARATOR = '|';
-export const ID_SEPARATOR = '@@';
 
 /** Non bindable attribute name **/
 export const NON_BINDABLE_ATTR = 'ngNonBindable';
@@ -67,10 +60,6 @@ export function invalid<T>(arg: o.Expression | o.Statement | t.Node): never {
       `Invalid state: Visitor ${this.constructor.name} doesn't handle ${o.constructor.name}`);
 }
 
-export function isI18NAttribute(name: string): boolean {
-  return name === I18N_ATTR || name.startsWith(I18N_ATTR_PREFIX);
-}
-
 export function asLiteral(value: any): o.Expression {
   if (Array.isArray(value)) {
     return o.literalArr(value.map(asLiteral));
@@ -78,8 +67,8 @@ export function asLiteral(value: any): o.Expression {
   return o.literal(value, o.INFERRED_TYPE);
 }
 
-export function conditionallyCreateMapObjectLiteral(keys: {[key: string]: string}): o.Expression|
-    null {
+export function conditionallyCreateMapObjectLiteral(keys: {[key: string]: string | string[]}):
+    o.Expression|null {
   if (Object.getOwnPropertyNames(keys).length > 0) {
     return mapToExpression(keys);
   }
@@ -112,7 +101,7 @@ export function getQueryPredicate(
       const selectors = selector.split(',').map(token => o.literal(token.trim()));
       predicate.push(...selectors);
     });
-    return constantPool.getConstLiteral(o.literalArr(predicate));
+    return constantPool.getConstLiteral(o.literalArr(predicate), true);
   } else {
     return query.predicate;
   }
@@ -146,7 +135,7 @@ export function getAttrsForDirectiveMatching(elOrTpl: t.Element | t.Template):
   const attributesMap: {[name: string]: string} = {};
 
   elOrTpl.attributes.forEach(a => {
-    if (!isI18NAttribute(a.name)) {
+    if (!isI18nAttribute(a.name)) {
       attributesMap[a.name] = a.value;
     }
   });

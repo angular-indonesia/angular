@@ -1,6 +1,6 @@
 # Building and serving Angular apps
 
-*intro - here are some topics of interest in the app development cycle*
+This page discusses build-specific configuration options for Angular projects.
 
 {@a app-environments}
 
@@ -8,7 +8,7 @@
 
 You can define different named build configurations for your project, such as *stage* and *production*, with different defaults. 
 
-Each named build configuration can have defaults for any of the options that apply to the various build targets, such as `build`, `serve`, and `test`. The CLI `build`, `serve`, and `test` commands can then replace files with appropriate versions for your intended target environment.
+Each named build configuration can have defaults for any of the options that apply to the various build targets, such as `build`, `serve`, and `test`. The [Angular CLI](cli) `build`, `serve`, and `test` commands can then replace files with appropriate versions for your intended target environment.
 
 The following figure shows how a project has multiple build targets, which can be executed using the named configurations that you define.
 
@@ -32,11 +32,11 @@ For example:
 
 The base file `environment.ts`, contains the default environment settings. For example:
 
-<code-example language="none" class="code-shell">
+```
 export const environment = {
   production: false
 };
-</code-example>
+```
 
 The `build` command uses this as the build target when no environment is specified. 
 You can add further variables, either as additional properties on the environment object, or as separate objects. 
@@ -144,7 +144,11 @@ You can add additional configurations as required. To add a staging environment,
 You can add more configuration options to this target environment as well. 
 Any option that your build supports can be overridden in a build target configuration.
 
-To build using the staging configuration, run `ng build --configuration=staging`.
+To build using the staging configuration, run the following command:
+
+<code-example language="sh" class="code-shell">
+ ng build --configuration=staging
+</code-example>
 
 You can also configure the `serve` command to use the targeted build configuration if you add it to the "serve:configurations" section of `angular.json`:
 
@@ -260,50 +264,6 @@ Each budget entry is a JSON object with the following properties:
 
  </table>
 
-{@a assets}
-
-## Adding project assets
-
-You can configure your project with a set of assets, such as images, to copy directly into the build for a particular build target. 
-
-Each build target section of the CLI configuration file, `angular.json`, has an `assets` section that lists  files or folders you want to copy into the build for that target.
-By default, the `src/assets/` folder and `src/favicon.ico` are copied into a build.
-
-```
-"assets": [
-  "src/assets",
-  "src/favicon.ico"
-]
-```
-
-You can edit the assets configuration to extend it for assets outside your project. 
-For example, the following invokes the [node-glob pattern matcher](https://github.com/isaacs/node-glob) using input from a given base folder. 
-It sends output to a folder that is relative to `outDir`, a configuration value that defaults to `dist/`*project-name*). 
-The result in this cased is the same as for the default assets configuration.
-
-```
-"assets": [
-  { "glob": "**/*", "input": "src/assets/", "output": "/assets/" },
-  { "glob": "favicon.ico", "input": "/src", "output": "/" },
-]
-```
-
-You can use this extended configuration to copy assets from outside your project. 
-For instance, you can copy assets from a node package with the following value:
-
-```
-"assets": [
- { "glob": "**/*", "input": "./node_modules/some-package/images", "output": "/some-package/" },
-]
-```
-
-This makes the contents of `node_modules/some-package/images/` available in the output folder `dist/some-package/`. 
-
-<div class="alert is-critical">
-
- For reasons of security, the CLI never writes files outside of the project output path.
-
-</div>
 
 {@a browser-compat}
 
@@ -312,7 +272,7 @@ This makes the contents of `node_modules/some-package/images/` available in the 
 The CLI uses [Autoprefixer](https://github.com/postcss/autoprefixer) to ensure compatibility with different browser and browser versions. 
 You may find it necessary to target specific browsers or exclude certain browser versions from your build.
 
-Internally, Autoprefixer relies on a library called [Browserslist(https://github.com/ai/browserslist)] to figure out which browsers to support with prefixing. 
+Internally, Autoprefixer relies on a library called [Browserslist](https://github.com/browserslist/browserslist) to figure out which browsers to support with prefixing. 
 Browserlist looks for configuration options in a `browserlist` property of the package configuration file, or in a configuration file named `.browserslistrc`. 
 Autoprefixer looks for the Browserlist configuration when it prefixes your CSS. 
 
@@ -331,9 +291,9 @@ Autoprefixer looks for the Browserlist configuration when it prefixes your CSS.
  last 2 versions
 ```
 
-See the [browserslist repo](https://github.com/ai/browserslist) for more examples of how to target specific browsers and versions.
+See the [browserslist repo](https://github.com/browserslist/browserslist) for more examples of how to target specific browsers and versions.
 
-<div class="alert is-helpful">>
+<div class="alert is-helpful">
 Backward compatibility
 
 If you want to produce a progressive web app and are using [Lighthouse](https://developers.google.com/web/tools/lighthouse/) to grade the project, add the following browserslist entry to your `package.json` file, in order to eliminate the [old flexbox](https://developers.google.com/web/tools/lighthouse/audits/old-flexbox) prefixes:
@@ -353,7 +313,7 @@ If you want to produce a progressive web app and are using [Lighthouse](https://
 ## Proxying to a backend server
 
 You can use the [proxying support](https://webpack.js.org/configuration/dev-server/#devserver-proxy) in the `webpack` dev server to divert certain URLs to a backend server, by passing a file to the `--proxy-config` build option.
-For example, to divert all calls for http://localhost:4200/api to a server running on http://localhost:3000/api, take the following steps.
+For example, to divert all calls for `http://localhost:4200/api` to a server running on `http://localhost:3000/api`, take the following steps.
 
 1. Create a file `proxy.conf.json` in the projects `src/` folder, next to `package.json`.
 

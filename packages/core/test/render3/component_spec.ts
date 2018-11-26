@@ -6,13 +6,11 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {ViewEncapsulation, createInjector, defineInjectable, defineInjector} from '../../src/core';
 
-import {DoCheck, Input, TemplateRef, ViewContainerRef, ViewEncapsulation, createInjector, defineInjectable, defineInjector} from '../../src/core';
-import {getRenderedText} from '../../src/render3/component';
-import {AttributeMarker, ComponentFactory, LifecycleHooksFeature, defineComponent, directiveInject, markDirty, template} from '../../src/render3/index';
+import {AttributeMarker, ComponentFactory, LifecycleHooksFeature, defineComponent, directiveInject, markDirty, template, getRenderedText} from '../../src/render3/index';
 import {bind, container, containerRefreshEnd, containerRefreshStart, element, elementEnd, elementProperty, elementStart, embeddedViewEnd, embeddedViewStart, nextContext, text, textBinding, tick} from '../../src/render3/instructions';
-import {ComponentDef, DirectiveDef, RenderFlags} from '../../src/render3/interfaces/definition';
-import {createRendererType2} from '../../src/view/index';
+import {ComponentDef, RenderFlags} from '../../src/render3/interfaces/definition';
 
 import {NgIf} from './common_with_def';
 import {getRendererFactory2} from './imported_renderer2';

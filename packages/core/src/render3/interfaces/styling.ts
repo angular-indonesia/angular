@@ -5,12 +5,9 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
-
 import {StyleSanitizeFn} from '../../sanitization/style_sanitizer';
-
-import {LElementNode} from './node';
+import {RElement} from '../interfaces/renderer';
 import {PlayerContext} from './player';
-
 
 
 /**
@@ -118,14 +115,8 @@ import {PlayerContext} from './player';
  * `updateStyleProp` or `updateClassProp` cannot be called with a new property (only
  * `updateStylingMap` can include new CSS properties that will be added to the context).
  */
-export interface StylingContext extends
-    Array<InitialStyles|{[key: string]: any}|number|string|boolean|LElementNode|StyleSanitizeFn|
-          PlayerContext|null> {
-  /**
-   * Location of element that is used as a target for this context.
-   */
-  [StylingIndex.ElementPosition]: LElementNode|null;
-
+export interface StylingContext extends Array<InitialStyles|{[key: string]: any}|number|string|
+                                              boolean|RElement|StyleSanitizeFn|PlayerContext|null> {
   /**
    * Location of animation context (which contains the active players) for this element styling
    * context.
@@ -157,10 +148,15 @@ export interface StylingContext extends
   [StylingIndex.ClassOffsetPosition]: number;
 
   /**
+   * Location of element that is used as a target for this context.
+   */
+  [StylingIndex.ElementPosition]: RElement|null;
+
+  /**
    * The last class value that was interpreted by elementStylingMap. This is cached
    * So that the algorithm can exit early incase the value has not changed.
    */
-  [StylingIndex.PreviousMultiClassValue]: {[key: string]: any}|string|null;
+  [StylingIndex.PreviousOrCachedMultiClassValue]: {[key: string]: any}|string|null;
 
   /**
    * The last style value that was interpreted by elementStylingMap. This is cached
@@ -185,35 +181,42 @@ export interface InitialStyles extends Array<string|null|boolean> { [0]: null; }
  */
 export const enum StylingFlags {
   // Implies no configurations
-  None = 0b000,
+  None = 0b00000,
   // Whether or not the entry or context itself is dirty
-  Dirty = 0b001,
+  Dirty = 0b00001,
   // Whether or not this is a class-based assignment
-  Class = 0b010,
+  Class = 0b00010,
   // Whether or not a sanitizer was applied to this property
-  Sanitize = 0b100,
+  Sanitize = 0b00100,
+  // Whether or not any player builders within need to produce new players
+  PlayerBuildersDirty = 0b01000,
+  // If NgClass is present (or some other class handler) then it will handle the map expressions and
+  // initial classes
+  OnlyProcessSingleClasses = 0b10000,
   // The max amount of bits used to represent these configuration values
-  BitCountSize = 3,
-  // There are only three bits here
-  BitMask = 0b111
+  BitCountSize = 5,
+  // There are only five bits here
+  BitMask = 0b11111
 }
 
 /** Used as numeric pointer values to determine what cells to update in the `StylingContext` */
 export const enum StylingIndex {
   // Position of where the initial styles are stored in the styling context
-  ElementPosition = 0,
-  // Position of where the initial styles are stored in the styling context
-  PlayerContext = 1,
+  PlayerContext = 0,
   // Position of where the style sanitizer is stored within the styling context
-  StyleSanitizerPosition = 2,
+  StyleSanitizerPosition = 1,
   // Position of where the initial styles are stored in the styling context
-  InitialStylesPosition = 3,
+  InitialStylesPosition = 2,
   // Index of location where the start of single properties are stored. (`updateStyleProp`)
-  MasterFlagPosition = 4,
+  MasterFlagPosition = 3,
   // Index of location where the class index offset value is located
-  ClassOffsetPosition = 5,
-  // Position of where the last string-based CSS class value was stored
-  PreviousMultiClassValue = 6,
+  ClassOffsetPosition = 4,
+  // Position of where the initial styles are stored in the styling context
+  // This index must align with HOST, see interfaces/view.ts
+  ElementPosition = 5,
+  // Position of where the last string-based CSS class value was stored (or a cached version of the
+  // initial styles when a [class] directive is present)
+  PreviousOrCachedMultiClassValue = 6,
   // Position of where the last string-based CSS class value was stored
   PreviousMultiStyleValue = 7,
   // Location of single (prop) value entries are stored within the context
@@ -222,10 +225,11 @@ export const enum StylingIndex {
   FlagsOffset = 0,
   PropertyOffset = 1,
   ValueOffset = 2,
-  // Size of each multi or single entry (flag + prop + value)
-  Size = 3,
+  PlayerBuilderIndexOffset = 3,
+  // Size of each multi or single entry (flag + prop + value + playerBuilderIndex)
+  Size = 4,
   // Each flag has a binary digit length of this value
-  BitCountSize = 14,  // (32 - 3) / 2 = ~14
+  BitCountSize = 14,  // (32 - 4) / 2 = ~14
   // The binary digit value as a mask
-  BitMask = 0b11111111111111  // 14 bits
+  BitMask = 0b11111111111111,  // 14 bits
 }

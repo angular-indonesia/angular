@@ -12,10 +12,11 @@ import {ChangeDetectionStrategy} from '../change_detection/constants';
 import {Provider} from '../di/provider';
 import {NgModuleDef} from '../metadata/ng_module';
 import {ViewEncapsulation} from '../metadata/view';
-import {Type} from '../type';
+import {Mutable, Type} from '../type';
+import {noSideEffects} from '../util';
 
 import {NG_COMPONENT_DEF, NG_DIRECTIVE_DEF, NG_MODULE_DEF, NG_PIPE_DEF} from './fields';
-import {BaseDef, ComponentDef, ComponentDefFeature, ComponentQuery, ComponentTemplate, ComponentType, DirectiveDef, DirectiveDefFeature, DirectiveType, DirectiveTypesOrFactory, PipeDef, PipeType, PipeTypesOrFactory} from './interfaces/definition';
+import {BaseDef, ComponentDef, ComponentDefFeature, ComponentQuery, ComponentTemplate, ComponentType, DirectiveDef, DirectiveDefFeature, DirectiveType, DirectiveTypesOrFactory, HostBindingsFunction, PipeDef, PipeType, PipeTypesOrFactory} from './interfaces/definition';
 import {CssSelectorList, SelectorFlags} from './interfaces/projection';
 
 export const EMPTY: {} = {};
@@ -53,7 +54,7 @@ export function defineComponent<T>(componentDefinition: {
   /**
    * Factory method used to create an instance of directive.
    */
-  factory: () => T;
+  factory: (t: Type<T>| null) => T;
 
   /**
    * The number of nodes, local refs, and pipes in this component template.
@@ -148,12 +149,12 @@ export function defineComponent<T>(componentDefinition: {
   /**
    * Function executed by the parent template to allow child directive to apply host bindings.
    */
-  hostBindings?: (directiveIndex: number, elementIndex: number) => void;
+  hostBindings?: HostBindingsFunction<T>;
 
   /**
    * Function to create instances of content queries associated with a given directive.
    */
-  contentQueries?: (() => void);
+  contentQueries?: ((dirIndex: number) => void);
 
   /** Refreshes content queries associated with directives in a given view */
   contentQueriesRefresh?: ((directiveIndex: number, queryIndex: number) => void);
@@ -209,7 +210,7 @@ export function defineComponent<T>(componentDefinition: {
   /**
    * A list of optional features to apply.
    *
-   * See: {@link NgOnChangesFeature}, {@link PublicFeature}
+   * See: {@link NgOnChangesFeature}, {@link ProvidersFeature}
    */
   features?: ComponentDefFeature[];
 
@@ -238,17 +239,6 @@ export function defineComponent<T>(componentDefinition: {
   changeDetection?: ChangeDetectionStrategy;
 
   /**
-   * Defines the set of injectable objects that are visible to a Directive and its light DOM
-   * children.
-   */
-  providers?: Provider[];
-
-  /**
-   * Defines the set of injectable objects that are visible to its view DOM children.
-   */
-  viewProviders?: Provider[];
-
-  /**
    * Registry of directives and components that may be found in this component's view.
    *
    * The property is either an array of `DirectiveDef`s or a function which returns the array of
@@ -263,26 +253,13 @@ export function defineComponent<T>(componentDefinition: {
    * `PipeDefs`s. The function is necessary to be able to support forward declarations.
    */
   pipes?: PipeTypesOrFactory | null;
-
-  /**
-   * Registry of the animation triggers present on the component that will be used by the view.
-   */
-  animations?: any[] | null;
 }): never {
   const type = componentDefinition.type;
-  const pipeTypes = componentDefinition.pipes !;
-  const directiveTypes = componentDefinition.directives !;
+  const typePrototype = type.prototype;
   const declaredInputs: {[key: string]: string} = {} as any;
-  const encapsulation = componentDefinition.encapsulation || ViewEncapsulation.Emulated;
-  const styles: string[] = componentDefinition.styles || EMPTY_ARRAY;
-  const animations: any[]|null = componentDefinition.animations || null;
-  let data = componentDefinition.data || {};
-  if (animations) {
-    data.animations = animations;
-  }
-  const def: ComponentDef<any> = {
+  const def: Mutable<ComponentDef<any>, keyof ComponentDef<any>> = {
     type: type,
-    diPublic: null,
+    providersResolver: null,
     consts: componentDefinition.consts,
     vars: componentDefinition.vars,
     hostVars: componentDefinition.hostVars || 0,
@@ -292,38 +269,47 @@ export function defineComponent<T>(componentDefinition: {
     contentQueries: componentDefinition.contentQueries || null,
     contentQueriesRefresh: componentDefinition.contentQueriesRefresh || null,
     attributes: componentDefinition.attributes || null,
-    inputs: invertObject(componentDefinition.inputs, declaredInputs),
     declaredInputs: declaredInputs,
-    outputs: invertObject(componentDefinition.outputs),
+    inputs: null !,   // assigned in noSideEffects
+    outputs: null !,  // assigned in noSideEffects
     exportAs: componentDefinition.exportAs || null,
-    onInit: type.prototype.ngOnInit || null,
-    doCheck: type.prototype.ngDoCheck || null,
-    afterContentInit: type.prototype.ngAfterContentInit || null,
-    afterContentChecked: type.prototype.ngAfterContentChecked || null,
-    afterViewInit: type.prototype.ngAfterViewInit || null,
-    afterViewChecked: type.prototype.ngAfterViewChecked || null,
-    onDestroy: type.prototype.ngOnDestroy || null,
+    onInit: typePrototype.ngOnInit || null,
+    doCheck: typePrototype.ngDoCheck || null,
+    afterContentInit: typePrototype.ngAfterContentInit || null,
+    afterContentChecked: typePrototype.ngAfterContentChecked || null,
+    afterViewInit: typePrototype.ngAfterViewInit || null,
+    afterViewChecked: typePrototype.ngAfterViewChecked || null,
+    onDestroy: typePrototype.ngOnDestroy || null,
     onPush: componentDefinition.changeDetection === ChangeDetectionStrategy.OnPush,
-    directiveDefs: directiveTypes ?
-        () => (typeof directiveTypes === 'function' ? directiveTypes() : directiveTypes)
-                  .map(extractDirectiveDef) :
-        null,
-    pipeDefs: pipeTypes ?
-        () => (typeof pipeTypes === 'function' ? pipeTypes() : pipeTypes).map(extractPipeDef) :
-        null,
+    directiveDefs: null !,  // assigned in noSideEffects
+    pipeDefs: null !,       // assigned in noSideEffects
     selectors: componentDefinition.selectors,
     viewQuery: componentDefinition.viewQuery || null,
     features: componentDefinition.features || null,
-    data,
+    data: componentDefinition.data || {},
     // TODO(misko): convert ViewEncapsulation into const enum so that it can be used directly in the
     // next line. Also `None` should be 0 not 2.
-    encapsulation,
-    providers: EMPTY_ARRAY,
-    viewProviders: EMPTY_ARRAY,
-    id: `c${_renderCompCount++}`, styles,
+    encapsulation: componentDefinition.encapsulation || ViewEncapsulation.Emulated,
+    id: 'c',
+    styles: componentDefinition.styles || EMPTY_ARRAY,
+    _: null as never,
   };
-  const feature = componentDefinition.features;
-  feature && feature.forEach((fn) => fn(def));
+  def._ = noSideEffects(() => {
+    const directiveTypes = componentDefinition.directives !;
+    const feature = componentDefinition.features;
+    const pipeTypes = componentDefinition.pipes !;
+    def.id += _renderCompCount++;
+    def.inputs = invertObject(componentDefinition.inputs, declaredInputs),
+    def.outputs = invertObject(componentDefinition.outputs),
+    feature && feature.forEach((fn) => fn(def));
+    def.directiveDefs = directiveTypes ?
+        () => (typeof directiveTypes === 'function' ? directiveTypes() : directiveTypes)
+                  .map(extractDirectiveDef) :
+        null;
+    def.pipeDefs = pipeTypes ?
+        () => (typeof pipeTypes === 'function' ? pipeTypes() : pipeTypes).map(extractPipeDef) :
+        null;
+  }) as never;
   return def as never;
 }
 
@@ -526,7 +512,7 @@ export const defineDirective = defineComponent as any as<T>(directiveDefinition:
   /**
    * Factory method used to create an instance of directive.
    */
-  factory: () => T;
+  factory: (t: Type<T>| null) => T;
 
   /**
    * Static attributes to set on host element.
@@ -596,7 +582,7 @@ export const defineDirective = defineComponent as any as<T>(directiveDefinition:
   /**
    * A list of optional features to apply.
    *
-   * See: {@link NgOnChangesFeature}, {@link PublicFeature}, {@link InheritDefinitionFeature}
+   * See: {@link NgOnChangesFeature}, {@link ProvidersFeature}, {@link InheritDefinitionFeature}
    */
   features?: DirectiveDefFeature[];
 
@@ -611,12 +597,12 @@ export const defineDirective = defineComponent as any as<T>(directiveDefinition:
   /**
    * Function executed by the parent template to allow child directive to apply host bindings.
    */
-  hostBindings?: (directiveIndex: number, elementIndex: number) => void;
+  hostBindings?: HostBindingsFunction<T>;
 
   /**
    * Function to create instances of content queries associated with a given directive.
    */
-  contentQueries?: (() => void);
+  contentQueries?: ((directiveIndex: number) => void);
 
   /** Refreshes content queries associated with directives in a given view */
   contentQueriesRefresh?: ((directiveIndex: number, queryIndex: number) => void);
@@ -651,7 +637,7 @@ export function definePipe<T>(pipeDef: {
   type: Type<T>,
 
   /** A factory for creating a pipe instance. */
-  factory: () => T,
+  factory: (t: Type<T>| null) => T,
 
   /** Whether the pipe is pure. */
   pure?: boolean

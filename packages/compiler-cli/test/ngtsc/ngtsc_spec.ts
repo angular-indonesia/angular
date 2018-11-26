@@ -8,6 +8,8 @@
 
 import {NgtscTestEnvironment} from './env';
 
+const trim = (input: string): string => input.replace(/\s+/g, ' ').trim();
+
 describe('ngtsc behavioral tests', () => {
   if (!NgtscTestEnvironment.supported) {
     // These tests should be excluded from the non-Bazel build.
@@ -380,10 +382,18 @@ describe('ngtsc behavioral tests', () => {
     const jsContents = env.getContents('test.js');
     expect(jsContents)
         .toContain(
-            `factory: function FooCmp_Factory(t) { return new (t || FooCmp)(i0.ɵinjectAttribute("test"), i0.ɵdirectiveInject(ChangeDetectorRef), i0.ɵdirectiveInject(ElementRef), i0.ɵdirectiveInject(i0.INJECTOR), i0.ɵinjectRenderer2(), i0.ɵdirectiveInject(TemplateRef), i0.ɵdirectiveInject(ViewContainerRef)); }`);
+            `factory: function FooCmp_Factory(t) { return new (t || FooCmp)(i0.ɵinjectAttribute("test"), i0.ɵdirectiveInject(ChangeDetectorRef), i0.ɵdirectiveInject(ElementRef), i0.ɵdirectiveInject(Injector), i0.ɵdirectiveInject(Renderer2), i0.ɵdirectiveInject(TemplateRef), i0.ɵdirectiveInject(ViewContainerRef)); }`);
   });
 
   it('should generate queries for components', () => {
+
+    // Helper functions to construct RegExps for output validation
+    const varRegExp = (name: string): RegExp => new RegExp(`var \\w+ = \\[\"${name}\"\\];`);
+    const queryRegExp = (id: number | null, descend: boolean, ref?: string): RegExp => {
+      const maybeRef = ref ? `, ${ref}` : ``;
+      return new RegExp(`i0\\.ɵquery\\(${id}, \\w+, ${descend}${maybeRef}\\)`);
+    };
+
     env.tsconfig();
     env.write(`test.ts`, `
         import {Component, ContentChild, ContentChildren, TemplateRef, ViewChild} from '@angular/core';
@@ -406,11 +416,17 @@ describe('ngtsc behavioral tests', () => {
 
     env.driveMain();
     const jsContents = env.getContents('test.js');
-    expect(jsContents).toContain(`i0.ɵquery(null, ["bar"], true, TemplateRef)`);
+    expect(jsContents).toMatch(varRegExp('bar'));
+    expect(jsContents).toMatch(varRegExp('test1'));
+    expect(jsContents).toMatch(varRegExp('test2'));
+    expect(jsContents).toMatch(varRegExp('accessor'));
     expect(jsContents).toContain(`i0.ɵquery(null, TemplateRef, false)`);
-    expect(jsContents).toContain(`i0.ɵquery(null, ["test2"], true)`);
-    expect(jsContents).toContain(`i0.ɵquery(0, ["accessor"], true)`);
-    expect(jsContents).toContain(`i0.ɵquery(1, ["test1"], true)`);
+    expect(jsContents)
+        .toMatch(queryRegExp(
+            null, true, 'TemplateRef'));  // match `i0.ɵquery(null, _c0, true, TemplateRef)`
+    expect(jsContents).toMatch(queryRegExp(null, true));  // match `i0.ɵquery(null, _c0, true)`
+    expect(jsContents).toMatch(queryRegExp(0, true));     // match `i0.ɵquery(0, _c0, true)`
+    expect(jsContents).toMatch(queryRegExp(1, true));     // match `i0.ɵquery(1, _c0, true)`
   });
 
   it('should handle queries that use forwardRef', () => {
@@ -435,6 +451,37 @@ describe('ngtsc behavioral tests', () => {
     expect(jsContents).toContain(`i0.ɵquery(null, ViewContainerRef, true)`);
   });
 
+  it('should generate host listeners for components', () => {
+    env.tsconfig();
+    env.write(`test.ts`, `
+        import {Component, HostListener} from '@angular/core';
+
+        @Component({
+          selector: 'test',
+          template: 'Test'
+        })
+        class FooCmp {
+          @HostListener('document:click', ['$event.target'])
+          onClick(eventTarget: HTMLElement): void {}
+
+          @HostListener('window:scroll')
+          onScroll(event: any): void {}
+        }
+    `);
+
+    env.driveMain();
+    const jsContents = env.getContents('test.js');
+    const hostBindingsFn = `
+      hostBindings: function FooCmp_HostBindings(rf, ctx, elIndex) {
+        if (rf & 1) {
+          i0.ɵlistener("click", function FooCmp_click_HostBindingHandler($event) { return ctx.onClick($event.target); });
+          i0.ɵlistener("scroll", function FooCmp_scroll_HostBindingHandler($event) { return ctx.onScroll(); });
+        }
+      }
+    `;
+    expect(trim(jsContents)).toContain(trim(hostBindingsFn));
+  });
+
   it('should generate host bindings for directives', () => {
     env.tsconfig();
     env.write(`test.ts`, `
@@ -455,25 +502,55 @@ describe('ngtsc behavioral tests', () => {
           @HostBinding('class.someclass')
           get someClass(): boolean { return false; }
 
-          @HostListener('onChange', ['arg'])
+          @HostListener('change', ['arg1', 'arg2', 'arg3'])
           onChange(event: any, arg: any): void {}
         }
     `);
 
     env.driveMain();
     const jsContents = env.getContents('test.js');
-    expect(jsContents)
-        .toContain(
-            `i0.ɵelementProperty(elIndex, "attr.hello", i0.ɵbind(i0.ɵloadDirective(dirIndex).foo));`);
-    expect(jsContents)
-        .toContain(
-            `i0.ɵelementProperty(elIndex, "prop", i0.ɵbind(i0.ɵloadDirective(dirIndex).bar));`);
-    expect(jsContents)
-        .toContain(
-            'i0.ɵelementProperty(elIndex, "class.someclass", i0.ɵbind(i0.ɵloadDirective(dirIndex).someClass))');
-    expect(jsContents).toContain('i0.ɵloadDirective(dirIndex).onClick($event)');
-    expect(jsContents)
-        .toContain('i0.ɵloadDirective(dirIndex).onChange(i0.ɵloadDirective(dirIndex).arg)');
+    const hostBindingsFn = `
+      hostBindings: function FooCmp_HostBindings(rf, ctx, elIndex) {
+        if (rf & 1) {
+          i0.ɵlistener("click", function FooCmp_click_HostBindingHandler($event) { return ctx.onClick($event); });
+          i0.ɵlistener("change", function FooCmp_change_HostBindingHandler($event) { return ctx.onChange(ctx.arg1, ctx.arg2, ctx.arg3); });
+          i0.ɵelementStyling(_c0, null, null, ctx);
+        }
+        if (rf & 2) {
+          i0.ɵelementAttribute(elIndex, "hello", i0.ɵbind(ctx.foo));
+          i0.ɵelementProperty(elIndex, "prop", i0.ɵbind(ctx.bar));
+          i0.ɵelementClassProp(elIndex, 0, ctx.someClass, ctx);
+          i0.ɵelementStylingApply(elIndex, ctx);
+        }
+      }
+    `;
+    expect(trim(jsContents)).toContain(trim(hostBindingsFn));
+  });
+
+  it('should generate host listeners for directives within hostBindings section', () => {
+    env.tsconfig();
+    env.write(`test.ts`, `
+        import {Directive, HostListener} from '@angular/core';
+
+        @Directive({
+          selector: '[test]',
+        })
+        class Dir {
+          @HostListener('change', ['arg'])
+          onChange(event: any, arg: any): void {}
+        }
+    `);
+
+    env.driveMain();
+    const jsContents = env.getContents('test.js');
+    const hostBindingsFn = `
+      hostBindings: function Dir_HostBindings(rf, ctx, elIndex) {
+        if (rf & 1) {
+          i0.ɵlistener("change", function Dir_change_HostBindingHandler($event) { return ctx.onChange(ctx.arg); });
+        }
+      }
+    `;
+    expect(trim(jsContents)).toContain(trim(hostBindingsFn));
   });
 
   it('should correctly recognize local symbols', () => {
@@ -560,6 +637,38 @@ describe('ngtsc behavioral tests', () => {
     expect(emptyFactory).toContain(`import * as i0 from '@angular/core';`);
     expect(emptyFactory).toContain(`export var ɵNonEmptyModule = true;`);
   });
+
+  it('should generate a summary stub for decorated classes in the input file only', () => {
+    env.tsconfig({'allowEmptyCodegenFiles': true});
+
+    env.write('test.ts', `
+        import {Injectable, NgModule} from '@angular/core';
+
+        export class NotAModule {}
+
+        @NgModule({})
+        export class TestModule {}
+    `);
+
+    env.driveMain();
+
+    const summaryContents = env.getContents('test.ngsummary.js');
+    expect(summaryContents).toEqual(`export var TestModuleNgSummary = null;\n`);
+  });
+
+  it('it should generate empty export when there are no other summary symbols, to ensure the output is a valid ES module',
+     () => {
+       env.tsconfig({'allowEmptyCodegenFiles': true});
+       env.write('empty.ts', `
+        export class NotAModule {}
+    `);
+
+       env.driveMain();
+
+       const emptySummary = env.getContents('empty.ngsummary.js');
+       // The empty export ensures this js file is still an ES module.
+       expect(emptySummary).toEqual(`export var ɵempty = null;\n`);
+     });
 
   it('should compile a banana-in-a-box inside of a template', () => {
     env.tsconfig();
@@ -662,4 +771,25 @@ describe('ngtsc behavioral tests', () => {
        const jsContents = env.getContents('test.js');
        expect(jsContents).toContain('directives: function () { return [CmpB]; }');
      });
+
+  it('should emit setClassMetadata calls for all types', () => {
+    env.tsconfig();
+    env.write('test.ts', `
+      import {Component, Directive, Injectable, NgModule, Pipe} from '@angular/core';
+
+      @Component({selector: 'cmp', template: 'I am a component!'}) class TestComponent {}
+      @Directive({selector: 'dir'}) class TestDirective {}
+      @Injectable() class TestInjectable {}
+      @NgModule({declarations: [TestComponent, TestDirective]}) class TestNgModule {}
+      @Pipe({name: 'pipe'}) class TestPipe {}
+    `);
+
+    env.driveMain();
+    const jsContents = env.getContents('test.js');
+    expect(jsContents).toContain('ɵsetClassMetadata(TestComponent, ');
+    expect(jsContents).toContain('ɵsetClassMetadata(TestDirective, ');
+    expect(jsContents).toContain('ɵsetClassMetadata(TestInjectable, ');
+    expect(jsContents).toContain('ɵsetClassMetadata(TestNgModule, ');
+    expect(jsContents).toContain('ɵsetClassMetadata(TestPipe, ');
+  });
 });

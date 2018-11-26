@@ -38,31 +38,46 @@ const BINARY_OPERATORS = new Map<BinaryOperator, ts.BinaryOperator>([
   [BinaryOperator.Plus, ts.SyntaxKind.PlusToken],
 ]);
 
-const CORE_SUPPORTED_SYMBOLS = new Set<string>([
-  'defineInjectable',
-  'defineInjector',
-  'ɵdefineNgModule',
-  'inject',
-  'ɵInjectableDef',
-  'ɵInjectorDef',
-  'ɵNgModuleDefWithMeta',
-  'ɵNgModuleFactory',
+const CORE_SUPPORTED_SYMBOLS = new Map<string, string>([
+  ['defineInjectable', 'defineInjectable'],
+  ['defineInjector', 'defineInjector'],
+  ['ɵdefineNgModule', 'defineNgModule'],
+  ['inject', 'inject'],
+  ['ɵsetClassMetadata', 'setClassMetadata'],
+  ['ɵInjectableDef', 'InjectableDef'],
+  ['ɵInjectorDef', 'InjectorDef'],
+  ['ɵNgModuleDefWithMeta', 'NgModuleDefWithMeta'],
+  ['ɵNgModuleFactory', 'NgModuleFactory'],
 ]);
 
 export class ImportManager {
   private moduleToIndex = new Map<string, string>();
   private nextIndex = 0;
 
-  constructor(private isCore: boolean, private prefix = 'i') {}
+  constructor(protected isCore: boolean, private prefix = 'i') {}
 
-  generateNamedImport(moduleName: string, symbol: string): string {
+  generateNamedImport(moduleName: string, symbol: string):
+      {moduleImport: string | null, symbol: string} {
     if (!this.moduleToIndex.has(moduleName)) {
       this.moduleToIndex.set(moduleName, `${this.prefix}${this.nextIndex++}`);
     }
-    if (this.isCore && moduleName === '@angular/core' && !CORE_SUPPORTED_SYMBOLS.has(symbol)) {
-      throw new Error(`Importing unexpected symbol ${symbol} while compiling core`);
+
+    return {
+      moduleImport: this.moduleToIndex.get(moduleName) !,
+      symbol: this.rewriteSymbol(moduleName, symbol)
+    };
+  }
+
+  protected rewriteSymbol(moduleName: string, symbol: string): string {
+    if (this.isCore && moduleName === '@angular/core') {
+      if (!CORE_SUPPORTED_SYMBOLS.has(symbol)) {
+        throw new Error(`Importing unexpected symbol ${symbol} while compiling core`);
+      }
+
+      symbol = CORE_SUPPORTED_SYMBOLS.get(symbol) !;
     }
-    return this.moduleToIndex.get(moduleName) !;
+
+    return symbol;
   }
 
   getAllImports(contextPath: string, rewriteCoreImportsTo: ts.SourceFile|null):
@@ -185,9 +200,13 @@ class ExpressionTranslatorVisitor implements ExpressionVisitor, StatementVisitor
   }
 
   visitInvokeFunctionExpr(ast: InvokeFunctionExpr, context: Context): ts.CallExpression {
-    return ts.createCall(
+    const expr = ts.createCall(
         ast.fn.visitExpression(this, context), undefined,
         ast.args.map(arg => arg.visitExpression(this, context)));
+    if (ast.pure) {
+      ts.addSyntheticLeadingComment(expr, ts.SyntaxKind.MultiLineCommentTrivia, '@__PURE__', false);
+    }
+    return expr;
   }
 
   visitInstantiateExpr(ast: InstantiateExpr, context: Context): ts.NewExpression {
@@ -206,13 +225,19 @@ class ExpressionTranslatorVisitor implements ExpressionVisitor, StatementVisitor
     }
   }
 
-  visitExternalExpr(ast: ExternalExpr, context: Context): ts.PropertyAccessExpression {
+  visitExternalExpr(ast: ExternalExpr, context: Context): ts.PropertyAccessExpression
+      |ts.Identifier {
     if (ast.value.moduleName === null || ast.value.name === null) {
       throw new Error(`Import unknown module or symbol ${ast.value}`);
     }
-    return ts.createPropertyAccess(
-        ts.createIdentifier(this.imports.generateNamedImport(ast.value.moduleName, ast.value.name)),
-        ts.createIdentifier(ast.value.name));
+    const {moduleImport, symbol} =
+        this.imports.generateNamedImport(ast.value.moduleName, ast.value.name);
+    if (moduleImport === null) {
+      return ts.createIdentifier(symbol);
+    } else {
+      return ts.createPropertyAccess(
+          ts.createIdentifier(moduleImport), ts.createIdentifier(symbol));
+    }
   }
 
   visitConditionalExpr(ast: ConditionalExpr, context: Context): ts.ParenthesizedExpression {
@@ -372,8 +397,9 @@ export class TypeTranslatorVisitor implements ExpressionVisitor, TypeVisitor {
     if (ast.value.moduleName === null || ast.value.name === null) {
       throw new Error(`Import unknown module or symbol`);
     }
-    const moduleSymbol = this.imports.generateNamedImport(ast.value.moduleName, ast.value.name);
-    const base = `${moduleSymbol}.${ast.value.name}`;
+    const {moduleImport, symbol} =
+        this.imports.generateNamedImport(ast.value.moduleName, ast.value.name);
+    const base = moduleImport ? `${moduleImport}.${symbol}` : symbol;
     if (ast.typeParams !== null) {
       const generics = ast.typeParams.map(type => type.visitType(this, context)).join(', ');
       return `${base}<${generics}>`;

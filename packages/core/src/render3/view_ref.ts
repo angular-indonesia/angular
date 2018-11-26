@@ -11,10 +11,13 @@ import {ChangeDetectorRef as viewEngine_ChangeDetectorRef} from '../change_detec
 import {ViewContainerRef as viewEngine_ViewContainerRef} from '../linker/view_container_ref';
 import {EmbeddedViewRef as viewEngine_EmbeddedViewRef, InternalViewRef as viewEngine_InternalViewRef} from '../linker/view_ref';
 
-import {checkNoChanges, checkNoChangesInRootView, detectChanges, detectChangesInRootView, getRendererFactory, markViewDirty, storeCleanupFn, viewAttached} from './instructions';
-import {TViewNode} from './interfaces/node';
-import {DIRECTIVES, FLAGS, LViewData, LViewFlags, PARENT} from './interfaces/view';
+import {checkNoChanges, checkNoChangesInRootView, detectChanges, detectChangesInRootView, markViewDirty, storeCleanupFn, viewAttached} from './instructions';
+import {TNode, TNodeType, TViewNode} from './interfaces/node';
+import {FLAGS, HOST, HOST_NODE, LViewData, LViewFlags, PARENT} from './interfaces/view';
 import {destroyLView} from './node_manipulation';
+import {getRendererFactory} from './state';
+import {getNativeByTNode} from './util';
+
 
 
 // Needed due to tsickle downleveling where multiple `implements` with classes creates
@@ -37,8 +40,13 @@ export class ViewRef<T> implements viewEngine_EmbeddedViewRef<T>, viewEngine_Int
    */
   _tViewNode: TViewNode|null = null;
 
-  // TODO(issue/24571): remove '!'.
-  rootNodes !: any[];
+  get rootNodes(): any[] {
+    if (this._view[HOST] == null) {
+      const tView = this._view[HOST_NODE] as TViewNode;
+      return collectNativeNodes(this._view, tView, []);
+    }
+    return [];
+  }
 
   constructor(_view: LViewData, private _context: T|null, private _componentIndex: number) {
     this._view = _view;
@@ -256,7 +264,7 @@ export class ViewRef<T> implements viewEngine_EmbeddedViewRef<T>, viewEngine_Int
   attachToAppRef(appRef: ApplicationRef) { this._appRef = appRef; }
 
   private _lookUpContext(): T {
-    return this._context = this._view[PARENT] ![DIRECTIVES] ![this._componentIndex] as T;
+    return this._context = this._view[PARENT] ![this._componentIndex] as T;
   }
 }
 
@@ -267,4 +275,20 @@ export class RootViewRef<T> extends ViewRef<T> {
   detectChanges(): void { detectChangesInRootView(this._view); }
 
   checkNoChanges(): void { checkNoChangesInRootView(this._view); }
+
+  get context(): T { return null !; }
+}
+
+function collectNativeNodes(lView: LViewData, parentTNode: TNode, result: any[]): any[] {
+  let tNodeChild = parentTNode.child;
+
+  while (tNodeChild) {
+    result.push(getNativeByTNode(tNodeChild, lView));
+    if (tNodeChild.type === TNodeType.ElementContainer) {
+      collectNativeNodes(lView, tNodeChild, result);
+    }
+    tNodeChild = tNodeChild.next;
+  }
+
+  return result;
 }

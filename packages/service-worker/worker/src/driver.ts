@@ -29,9 +29,9 @@ const IDLE_THRESHOLD = 5000;
 
 const SUPPORTED_CONFIG_VERSION = 1;
 
-const NOTIFICATION_OPTION_NAMES = [
-  'actions', 'badge', 'body', 'dir', 'icon', 'lang', 'renotify', 'requireInteraction', 'tag',
-  'vibrate', 'data'
+const NOTIFICATION_OPTION_NAMES: (keyof Notification)[] = [
+  'actions', 'badge', 'body', 'data', 'dir', 'icon', 'image', 'lang', 'renotify',
+  'requireInteraction', 'silent', 'tag', 'timestamp', 'title', 'vibrate'
 ];
 
 interface LatestEntry {
@@ -123,9 +123,22 @@ export class Driver implements Debuggable, UpdateSource {
     // The activate event is triggered when this version of the service worker is
     // first activated.
     this.scope.addEventListener('activate', (event) => {
-      // As above, it's safe to take over from existing clients immediately, since
-      // the new SW version will continue to serve the old application.
-      event !.waitUntil(this.scope.clients.claim());
+      event !.waitUntil((async() => {
+        // As above, it's safe to take over from existing clients immediately, since the new SW
+        // version will continue to serve the old application.
+        await this.scope.clients.claim();
+
+        // Once all clients have been taken over, we can delete caches used by old versions of
+        // `@angular/service-worker`, which are no longer needed. This can happen in the background.
+        this.idle.schedule('activate: cleanup-old-sw-caches', async() => {
+          try {
+            await this.cleanupOldSwCaches();
+          } catch (err) {
+            // Nothing to do - cleanup failed. Just log it.
+            this.debugger.log(err, 'cleanupOldSwCaches @ activate: cleanup-old-sw-caches');
+          }
+        });
+      })());
 
       // Rather than wait for the first fetch event, which may not arrive until
       // the next time the application is loaded, the SW takes advantage of the
@@ -146,6 +159,7 @@ export class Driver implements Debuggable, UpdateSource {
     this.scope.addEventListener('fetch', (event) => this.onFetch(event !));
     this.scope.addEventListener('message', (event) => this.onMessage(event !));
     this.scope.addEventListener('push', (event) => this.onPush(event !));
+    this.scope.addEventListener('notificationclick', (event) => this.onClick(event !));
 
     // The debugger generates debug pages in response to debugging requests.
     this.debugger = new DebugHandler(this, this.adapter);
@@ -262,6 +276,11 @@ export class Driver implements Debuggable, UpdateSource {
     msg.waitUntil(this.handlePush(msg.data.json()));
   }
 
+  private onClick(event: NotificationEvent): void {
+    // Handle the click event and keep the SW alive until it's handled.
+    event.waitUntil(this.handleClick(event.notification, event.action));
+  }
+
   private async handleMessage(msg: MsgAny&{action: string}, from: Client): Promise<void> {
     if (isMsgCheckForUpdates(msg)) {
       const action = (async() => { await this.checkForUpdate(); })();
@@ -284,6 +303,21 @@ export class Driver implements Debuggable, UpdateSource {
     NOTIFICATION_OPTION_NAMES.filter(name => desc.hasOwnProperty(name))
         .forEach(name => options[name] = desc[name]);
     await this.scope.registration.showNotification(desc['title'] !, options);
+  }
+
+  private async handleClick(notification: Notification, action?: string): Promise<void> {
+    notification.close();
+
+    const options: {-readonly[K in keyof Notification]?: Notification[K]} = {};
+    // The filter uses `name in notification` because the properties are on the prototype so
+    // hasOwnProperty does not work here
+    NOTIFICATION_OPTION_NAMES.filter(name => name in notification)
+        .forEach(name => options[name] = notification[name]);
+
+    await this.broadcast({
+      type: 'NOTIFICATION_CLICK',
+      data: {action, notification: options},
+    });
   }
 
   private async reportStatus(client: Client, promise: Promise<void>, nonce: number): Promise<void> {
@@ -870,6 +904,19 @@ export class Driver implements Debuggable, UpdateSource {
 
     // Commit all the changes to the saved state.
     await this.sync();
+  }
+
+  /**
+   * Delete caches that were used by older versions of `@angular/service-worker` to avoid running
+   * into storage quota limitations imposed by browsers.
+   * (Since at this point the SW has claimed all clients, it is safe to remove those caches.)
+   */
+  async cleanupOldSwCaches(): Promise<void> {
+    const cacheNames = await this.scope.caches.keys();
+    const oldSwCacheNames =
+        cacheNames.filter(name => /^ngsw:(?:active|staged|manifest:.+)$/.test(name));
+
+    await Promise.all(oldSwCacheNames.map(name => this.scope.caches.delete(name)));
   }
 
   /**

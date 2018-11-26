@@ -72,10 +72,11 @@ export function InheritDefinitionFeature(definition: DirectiveDef<any>| Componen
       const superHostBindings = superDef.hostBindings;
       if (superHostBindings) {
         if (prevHostBindings) {
-          definition.hostBindings = (directiveIndex: number, elementIndex: number) => {
-            superHostBindings(directiveIndex, elementIndex);
-            prevHostBindings(directiveIndex, elementIndex);
+          definition.hostBindings = (rf: RenderFlags, ctx: any, elementIndex: number) => {
+            superHostBindings(rf, ctx, elementIndex);
+            prevHostBindings(rf, ctx, elementIndex);
           };
+          (definition as any).hostVars += superDef.hostVars;
         } else {
           definition.hostBindings = superHostBindings;
         }
@@ -102,9 +103,9 @@ export function InheritDefinitionFeature(definition: DirectiveDef<any>| Componen
       const superContentQueries = superDef.contentQueries;
       if (superContentQueries) {
         if (prevContentQueries) {
-          definition.contentQueries = () => {
-            superContentQueries();
-            prevContentQueries();
+          definition.contentQueries = (dirIndex: number) => {
+            superContentQueries(dirIndex);
+            prevContentQueries(dirIndex);
           };
         } else {
           definition.contentQueries = superContentQueries;
@@ -146,7 +147,7 @@ export function InheritDefinitionFeature(definition: DirectiveDef<any>| Componen
       const features = superDef.features;
       if (features) {
         for (const feature of features) {
-          if (feature && feature !== InheritDefinitionFeature) {
+          if (feature && feature.ngInherit) {
             (feature as DirectiveDefFeature)(definition);
           }
         }

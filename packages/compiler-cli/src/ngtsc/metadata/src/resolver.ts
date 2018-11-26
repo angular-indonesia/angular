@@ -17,7 +17,7 @@ import * as ts from 'typescript';
 
 import {ClassMemberKind, ReflectionHost} from '../../host';
 
-const TS_DTS_JS_EXTENSION = /(\.d)?\.ts|\.js$/;
+const TS_DTS_JS_EXTENSION = /(?:\.d)?\.ts$|\.js$/;
 
 /**
  * Represents a value which cannot be determined statically.
@@ -454,8 +454,9 @@ class StaticInterpreter {
   }
 
   private visitVariableDeclaration(node: ts.VariableDeclaration, context: Context): ResolvedValue {
-    if (node.initializer !== undefined) {
-      return this.visitExpression(node.initializer, context);
+    const value = this.host.getVariableValue(node);
+    if (value !== null) {
+      return this.visitExpression(value, context);
     } else if (isVariableDeclarationDeclared(node)) {
       return this.getReference(node, context);
     } else {
