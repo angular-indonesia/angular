@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {ConstantPool, CssSelector, Expression, R3ComponentMetadata, R3DirectiveMetadata, SelectorMatcher, Statement, TmplAstNode, WrappedNodeExpr, compileComponentFromMetadata, makeBindingParser, parseTemplate} from '@angular/compiler';
+import {ConstantPool, CssSelector, DomElementSchemaRegistry, ElementSchemaRegistry, Expression, R3ComponentMetadata, R3DirectiveMetadata, SelectorMatcher, Statement, TmplAstNode, WrappedNodeExpr, compileComponentFromMetadata, makeBindingParser, parseTemplate} from '@angular/compiler';
 import * as path from 'path';
 import * as ts from 'typescript';
 
@@ -38,9 +38,11 @@ export class ComponentDecoratorHandler implements
   constructor(
       private checker: ts.TypeChecker, private reflector: ReflectionHost,
       private scopeRegistry: SelectorScopeRegistry, private isCore: boolean,
-      private resourceLoader: ResourceLoader, private rootDirs: string[]) {}
+      private resourceLoader: ResourceLoader, private rootDirs: string[],
+      private defaultPreserveWhitespaces: boolean) {}
 
   private literalCache = new Map<Decorator, ts.ObjectLiteralExpression>();
+  private elementSchemaRegistry = new DomElementSchemaRegistry();
 
 
   detect(node: ts.Declaration, decorators: Decorator[]|null): Decorator|undefined {
@@ -74,8 +76,9 @@ export class ComponentDecoratorHandler implements
 
     // @Component inherits @Directive, so begin by extracting the @Directive metadata and building
     // on it.
-    const directiveResult =
-        extractDirectiveMetadata(node, decorator, this.checker, this.reflector, this.isCore);
+    const directiveResult = extractDirectiveMetadata(
+        node, decorator, this.checker, this.reflector, this.isCore,
+        this.elementSchemaRegistry.getDefaultComponentElementName());
     if (directiveResult === undefined) {
       // `extractDirectiveMetadata` returns undefined when the @Directive has `jit: true`. In this
       // case, compilation of the decorator is skipped. Returning an empty object signifies
@@ -109,7 +112,7 @@ export class ComponentDecoratorHandler implements
           ErrorCode.COMPONENT_MISSING_TEMPLATE, decorator.node, 'component is missing a template');
     }
 
-    let preserveWhitespaces: boolean = false;
+    let preserveWhitespaces: boolean = this.defaultPreserveWhitespaces;
     if (component.has('preserveWhitespaces')) {
       const expr = component.get('preserveWhitespaces') !;
       const value = staticallyResolve(expr, this.reflector, this.checker);
