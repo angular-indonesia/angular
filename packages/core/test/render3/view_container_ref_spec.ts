@@ -10,13 +10,13 @@ import {ChangeDetectorRef, Component as _Component, ComponentFactoryResolver, El
 import {ViewEncapsulation} from '../../src/metadata';
 import {AttributeMarker, NO_CHANGE, NgOnChangesFeature, defineComponent, defineDirective, definePipe, injectComponentFactoryResolver, load, query, queryRefresh} from '../../src/render3/index';
 
-import {bind, container, containerRefreshEnd, containerRefreshStart, directiveInject, element, elementEnd, elementProperty, elementStart, embeddedViewEnd, embeddedViewStart, interpolation1, interpolation3, nextContext, projection, projectionDef, reference, template, text, textBinding} from '../../src/render3/instructions';
+import {allocHostVars, bind, container, containerRefreshEnd, containerRefreshStart, directiveInject, element, elementEnd, elementProperty, elementStart, embeddedViewEnd, embeddedViewStart, interpolation1, interpolation3, nextContext, projection, projectionDef, reference, template, text, textBinding} from '../../src/render3/instructions';
 import {RenderFlags} from '../../src/render3/interfaces/definition';
 import {RElement} from '../../src/render3/interfaces/renderer';
 import {templateRefExtractor} from '../../src/render3/view_engine_compatibility_prebound';
 import {NgModuleFactory} from '../../src/render3/ng_module_ref';
 import {pipe, pipeBind1} from '../../src/render3/pipe';
-import {getViewData} from '../../src/render3/state';
+import {getLView} from '../../src/render3/state';
 import {getNativeByIndex} from '../../src/render3/util';
 import {NgForOf} from '../../test/render3/common_with_def';
 import {fixmeIvy} from '@angular/private/testing';
@@ -1564,7 +1564,7 @@ describe('ViewContainerRef', () => {
     });
   });
 
-  fixmeIvy(`Hooks don't run`) && describe('life cycle hooks', () => {
+  describe('life cycle hooks', () => {
 
     // Angular 5 reference: https://stackblitz.com/edit/lifecycle-hooks-vcref
     const log: string[] = [];
@@ -1826,9 +1826,11 @@ describe('ViewContainerRef', () => {
           consts: 0,
           vars: 0,
           template: (rf: RenderFlags, cmp: HostBindingCmpt) => {},
-          hostVars: 1,
           attributes: ['id', 'attribute'],
           hostBindings: function(rf: RenderFlags, ctx: HostBindingCmpt, elIndex: number) {
+            if (rf & RenderFlags.Create) {
+              allocHostVars(1);
+            }
             if (rf & RenderFlags.Update) {
               elementProperty(elIndex, 'title', bind(ctx.title));
             }
@@ -2013,7 +2015,7 @@ describe('ViewContainerRef', () => {
               element(1, 'div', ['bar', ''], ['foo', '']);
             }
             // testing only
-            fooEl = getNativeByIndex(1, getViewData());
+            fooEl = getNativeByIndex(1, getLView());
           },
           viewQuery: function(rf: RenderFlags, ctx: any) {
             if (rf & RenderFlags.Create) {
