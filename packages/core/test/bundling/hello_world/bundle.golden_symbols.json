@@ -3,6 +3,9 @@
     "name": "ACTIVE_INDEX"
   },
   {
+    "name": "ANIMATION_PROP_PREFIX"
+  },
+  {
     "name": "BINDING_INDEX"
   },
   {
@@ -51,7 +54,7 @@
     "name": "INJECTOR"
   },
   {
-    "name": "INJECTOR_SIZE"
+    "name": "INJECTOR_BLOOM_PARENT_SIZE"
   },
   {
     "name": "MONKEY_PATCH_KEY_NAME"
@@ -343,6 +346,9 @@
   },
   {
     "name": "invertObject"
+  },
+  {
+    "name": "isAnimationProp"
   },
   {
     "name": "isComponentDef"

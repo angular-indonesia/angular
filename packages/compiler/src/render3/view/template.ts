@@ -41,11 +41,11 @@ import {CONTEXT_NAME, IMPLICIT_REFERENCE, NON_BINDABLE_ATTR, REFERENCE_PREFIX, R
 function mapBindingToInstruction(type: BindingType): o.ExternalReference|undefined {
   switch (type) {
     case BindingType.Property:
+    case BindingType.Animation:
       return R3.elementProperty;
     case BindingType.Class:
       return R3.elementClassProp;
     case BindingType.Attribute:
-    case BindingType.Animation:
       return R3.elementAttribute;
     default:
       return undefined;
@@ -57,6 +57,12 @@ export function renderFlagCheckIfStmt(
     flags: core.RenderFlags, statements: o.Statement[]): o.IfStmt {
   return o.ifStmt(o.variable(RENDER_FLAGS).bitwiseAnd(o.literal(flags), null, false), statements);
 }
+
+// Default selector used by `<ng-content>` if none specified
+const DEFAULT_NG_CONTENT_SELECTOR = '*';
+
+// Selector attribute name of `<ng-content>`
+const NG_CONTENT_SELECT_ATTR = 'select';
 
 export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver {
   private _dataIndex = 0;
@@ -101,6 +107,12 @@ export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver
   private _bindingSlots = 0;
 
   private fileBasedI18nSuffix: string;
+
+  // Whether the template includes <ng-content> tags.
+  private _hasNgContent: boolean = false;
+
+  // Selectors found in the <ng-content> tags in the template.
+  private _ngContentSelectors: string[] = [];
 
   constructor(
       private constantPool: ConstantPool, parentBindingScope: BindingScope, private level = 0,
@@ -154,31 +166,13 @@ export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver
         });
   }
 
-  buildTemplateFunction(
-      nodes: t.Node[], variables: t.Variable[], hasNgContent: boolean = false,
-      ngContentSelectors: string[] = [], i18n?: i18n.AST): o.FunctionExpr {
+  buildTemplateFunction(nodes: t.Node[], variables: t.Variable[], i18n?: i18n.AST): o.FunctionExpr {
     if (this._namespace !== R3.namespaceHTML) {
       this.creationInstruction(null, this._namespace);
     }
 
     // Create variable bindings
     variables.forEach(v => this.registerContextVariables(v));
-
-    // Output a `ProjectionDef` instruction when some `<ng-content>` are present
-    if (hasNgContent) {
-      const parameters: o.Expression[] = [];
-
-      // Only selectors with a non-default value are generated
-      if (ngContentSelectors.length > 1) {
-        const r3Selectors = ngContentSelectors.map(s => core.parseSelectorToR3Selector(s));
-        // `projectionDef` needs both the parsed and raw value of the selectors
-        const parsed = this.constantPool.getConstLiteral(asLiteral(r3Selectors), true);
-        const unParsed = this.constantPool.getConstLiteral(asLiteral(ngContentSelectors), true);
-        parameters.push(parsed, unParsed);
-      }
-
-      this.creationInstruction(null, R3.projectionDef, parameters);
-    }
 
     // Initiate i18n context in case:
     // - this template has parent i18n context
@@ -197,6 +191,26 @@ export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver
     // pass. It's necessary to separate the passes to ensure local refs are defined before
     // resolving bindings. We also count bindings in this pass as we walk bound expressions.
     t.visitAll(this, nodes);
+
+    // Output a `ProjectionDef` instruction when some `<ng-content>` are present
+    if (this._hasNgContent) {
+      const parameters: o.Expression[] = [];
+
+      // Only selectors with a non-default value are generated
+      if (this._ngContentSelectors.length) {
+        const r3Selectors = this._ngContentSelectors.map(s => core.parseSelectorToR3Selector(s));
+        // `projectionDef` needs both the parsed and raw value of the selectors
+        const parsed = this.constantPool.getConstLiteral(asLiteral(r3Selectors), true);
+        const unParsed =
+            this.constantPool.getConstLiteral(asLiteral(this._ngContentSelectors), true);
+        parameters.push(parsed, unParsed);
+      }
+
+      // Since we accumulate ngContent selectors while processing template elements,
+      // we *prepend* `projectionDef` to creation instructions block, to put it before
+      // any `projection` instructions
+      this.creationInstruction(null, R3.projectionDef, parameters, /* prepend */ true);
+    }
 
     // Add total binding count to pure function count so pure function instructions are
     // generated with the correct slot offset when update instructions are processed.
@@ -399,16 +413,19 @@ export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver
   }
 
   visitContent(ngContent: t.Content) {
+    this._hasNgContent = true;
     const slot = this.allocateDataSlot();
-    const selectorIndex = ngContent.selectorIndex;
+    let selectorIndex = ngContent.selector === DEFAULT_NG_CONTENT_SELECTOR ?
+        0 :
+        this._ngContentSelectors.push(ngContent.selector);
     const parameters: o.Expression[] = [o.literal(slot)];
 
     const attributeAsList: string[] = [];
 
     ngContent.attributes.forEach((attribute) => {
-      const name = attribute.name;
-      if (name !== 'select') {
-        attributeAsList.push(name, attribute.value);
+      const {name, value} = attribute;
+      if (name.toLowerCase() !== NG_CONTENT_SELECT_ATTR) {
+        attributeAsList.push(name, value);
       }
     });
 
@@ -609,10 +626,11 @@ export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver
       const instruction = mapBindingToInstruction(input.type);
       if (input.type === BindingType.Animation) {
         const value = input.value.visit(this._valueConverter);
-        // setAttribute without a value doesn't make any sense
+        // setProperty without a value doesn't make any sense
         if (value.name || value.value) {
+          this.allocateBindingSlots(value);
           const name = prepareSyntheticAttributeName(input.name);
-          this.updateInstruction(input.sourceSpan, R3.elementAttribute, () => {
+          this.updateInstruction(input.sourceSpan, R3.elementProperty, () => {
             return [
               o.literal(elementIndex), o.literal(name), this.convertPropertyBinding(implicit, value)
             ];
@@ -724,7 +742,7 @@ export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver
     // template definition. e.g. <div *ngIf="showing"> {{ foo }} </div>  <div #foo></div>
     this._nestedTemplateFns.push(() => {
       const templateFunctionExpr = templateVisitor.buildTemplateFunction(
-          template.children, template.variables, false, [], template.i18n);
+          template.children, template.variables, template.i18n);
       this.constantPool.statements.push(templateFunctionExpr.toDeclStmt(templateName, null));
     });
 
@@ -834,8 +852,8 @@ export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver
   // bindings. e.g. {{ foo }} <div #foo></div>
   private instructionFn(
       fns: (() => o.Statement)[], span: ParseSourceSpan|null, reference: o.ExternalReference,
-      paramsOrFn: o.Expression[]|(() => o.Expression[])): void {
-    fns.push(() => {
+      paramsOrFn: o.Expression[]|(() => o.Expression[]), prepend: boolean = false): void {
+    fns[prepend ? 'unshift' : 'push'](() => {
       const params = Array.isArray(paramsOrFn) ? paramsOrFn : paramsOrFn();
       return instruction(span, reference, params).toStmt();
     });
@@ -856,8 +874,8 @@ export class TemplateDefinitionBuilder implements t.Visitor<void>, LocalResolver
 
   private creationInstruction(
       span: ParseSourceSpan|null, reference: o.ExternalReference,
-      paramsOrFn?: o.Expression[]|(() => o.Expression[])) {
-    this.instructionFn(this._creationCodeFns, span, reference, paramsOrFn || []);
+      paramsOrFn?: o.Expression[]|(() => o.Expression[]), prepend?: boolean) {
+    this.instructionFn(this._creationCodeFns, span, reference, paramsOrFn || [], prepend);
   }
 
   private updateInstruction(
@@ -1398,14 +1416,14 @@ function interpolate(args: o.Expression[]): o.Expression {
 export function parseTemplate(
     template: string, templateUrl: string,
     options: {preserveWhitespaces?: boolean, interpolationConfig?: InterpolationConfig} = {}):
-    {errors?: ParseError[], nodes: t.Node[], hasNgContent: boolean, ngContentSelectors: string[]} {
+    {errors?: ParseError[], nodes: t.Node[]} {
   const {interpolationConfig, preserveWhitespaces} = options;
   const bindingParser = makeBindingParser(interpolationConfig);
   const htmlParser = new HtmlParser();
   const parseResult = htmlParser.parse(template, templateUrl, true, interpolationConfig);
 
   if (parseResult.errors && parseResult.errors.length > 0) {
-    return {errors: parseResult.errors, nodes: [], hasNgContent: false, ngContentSelectors: []};
+    return {errors: parseResult.errors, nodes: []};
   }
 
   let rootNodes: html.Node[] = parseResult.rootNodes;
@@ -1428,13 +1446,12 @@ export function parseTemplate(
         new I18nMetaVisitor(interpolationConfig, /* keepI18nAttrs */ false), rootNodes);
   }
 
-  const {nodes, hasNgContent, ngContentSelectors, errors} =
-      htmlAstToRender3Ast(rootNodes, bindingParser);
+  const {nodes, errors} = htmlAstToRender3Ast(rootNodes, bindingParser);
   if (errors && errors.length > 0) {
-    return {errors, nodes: [], hasNgContent: false, ngContentSelectors: []};
+    return {errors, nodes: []};
   }
 
-  return {nodes, hasNgContent, ngContentSelectors};
+  return {nodes};
 }
 
 /**

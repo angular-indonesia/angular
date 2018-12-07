@@ -3,6 +3,9 @@
     "name": "ACTIVE_INDEX"
   },
   {
+    "name": "ANIMATION_PROP_PREFIX"
+  },
+  {
     "name": "BINDING_INDEX"
   },
   {
@@ -72,7 +75,7 @@
     "name": "INJECTOR"
   },
   {
-    "name": "INJECTOR_SIZE"
+    "name": "INJECTOR_BLOOM_PARENT_SIZE"
   },
   {
     "name": "InjectFlags"
@@ -472,9 +475,6 @@
   },
   {
     "name": "createNodeAtIndex"
-  },
-  {
-    "name": "createOutput"
   },
   {
     "name": "createRootComponent"
@@ -879,6 +879,9 @@
     "name": "invokeDirectivesHostBindings"
   },
   {
+    "name": "isAnimationProp"
+  },
+  {
     "name": "isComponent"
   },
   {
@@ -1168,9 +1171,6 @@
   },
   {
     "name": "storeCleanupFn"
-  },
-  {
-    "name": "storeCleanupWithContext"
   },
   {
     "name": "stringify"

@@ -39,19 +39,23 @@ export class GeneratedShimsHostWrapper implements ts.CompilerHost {
           (delegate.resolveTypeReferenceDirectives as ts3ResolveTypeReferenceDirectives) !(
               names, containingFile);
     }
+    if (delegate.directoryExists !== undefined) {
+      this.directoryExists = (directoryName: string) => delegate.directoryExists !(directoryName);
+    }
   }
 
   resolveTypeReferenceDirectives?:
       (names: string[], containingFile: string) => ts.ResolvedTypeReferenceDirective[];
 
+  directoryExists?: (directoryName: string) => boolean;
+
   getSourceFile(
       fileName: string, languageVersion: ts.ScriptTarget,
       onError?: ((message: string) => void)|undefined,
       shouldCreateNewSourceFile?: boolean|undefined): ts.SourceFile|undefined {
-    const canonical = this.getCanonicalFileName(fileName);
     for (let i = 0; i < this.shimGenerators.length; i++) {
       const generator = this.shimGenerators[i];
-      const originalFile = generator.getOriginalSourceOfShim(canonical);
+      const originalFile = generator.getOriginalSourceOfShim(fileName);
       if (originalFile !== null) {
         // This shim generator has recognized the filename being requested, and is now responsible
         // for generating its contents, based on the contents of the original file it has requested.

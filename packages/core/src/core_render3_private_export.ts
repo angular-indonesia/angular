@@ -74,6 +74,7 @@ export {
   pureFunction8 as ɵpureFunction8,
   pureFunctionV as ɵpureFunctionV,
   getCurrentView as ɵgetCurrentView,
+  getHostElement as ɵgetHostElement,
   restoreView as ɵrestoreView,
   containerRefreshStart as ɵcontainerRefreshStart,
   containerRefreshEnd as ɵcontainerRefreshEnd,
@@ -154,7 +155,7 @@ export {
 } from './sanitization/bypass';
 
 export {
-  getContext as ɵgetContext
+  getLContext as ɵgetLContext
 } from './render3/context_discovery';
 
 export {

@@ -140,7 +140,7 @@ describe('compiler compliance: styling', () => {
           },
           encapsulation: 2,
           data: {
-            animations: [{name: 'foo123'}, {name: 'trigger123'}]
+            animation: [{name: 'foo123'}, {name: 'trigger123'}]
           }
         });
       `;
@@ -182,7 +182,7 @@ describe('compiler compliance: styling', () => {
           },
           encapsulation: 2,
           data: {
-            animations: []
+            animation: []
           }
         });
       `;
@@ -220,6 +220,8 @@ describe('compiler compliance: styling', () => {
         …
         MyComponent.ngComponentDef = $r3$.ɵdefineComponent({
           …
+          consts: 3,
+          vars: 1,
           template:  function MyComponent_Template(rf, $ctx$) {
             if (rf & 1) {
               $r3$.ɵelement(0, "div", $e0_attrs$);
@@ -227,7 +229,7 @@ describe('compiler compliance: styling', () => {
               $r3$.ɵelement(2, "div", $e2_attrs$);
             }
             if (rf & 2) {
-              $r3$.ɵelementAttribute(0, "@foo", $r3$.ɵbind(ctx.exp));
+              $r3$.ɵelementProperty(0, "@foo", $r3$.ɵbind(ctx.exp));
             }
           },
           encapsulation: 2
@@ -859,6 +861,12 @@ describe('compiler compliance: styling', () => {
              'spec.ts': `
                 import {Directive, Component, NgModule, HostBinding} from '@angular/core';
 
+                @Directive({selector: '[myClassDir]'})
+                export class ClassDirective {
+                  @HostBinding('class')
+                  myClassMap = {red: true};
+                }
+
                 @Directive({selector: '[myWidthDir]'})
                 export class WidthDirective {
                   @HostBinding('style.width')
@@ -880,13 +888,13 @@ describe('compiler compliance: styling', () => {
                 @Component({
                   selector: 'my-component',
                   template: '
-                    <div myWidthDir myHeightDir></div>
+                    <div myWidthDir myHeightDir myClassDir></div>
                   ',
                 })
                 export class MyComponent {
                 }
 
-                @NgModule({declarations: [MyComponent, WidthDirective, HeightDirective]})
+                @NgModule({declarations: [MyComponent, WidthDirective, HeightDirective, ClassDirective]})
                 export class MyModule {}
             `
            }
@@ -897,6 +905,16 @@ describe('compiler compliance: styling', () => {
           const _c1 = ["width"];
           const _c2 = ["bar"];
           const _c3 = ["height"];
+          …
+          function ClassDirective_HostBindings(rf, ctx, elIndex) {
+            if (rf & 1) {
+              $r3$.ɵelementStyling(null, null, null, ctx);
+            }
+            if (rf & 2) {
+              $r3$.ɵelementStylingMap(elIndex, ctx.myClassMap, null, ctx);
+              $r3$.ɵelementStylingApply(elIndex, ctx);
+            }
+          }
           …
           function WidthDirective_HostBindings(rf, ctx, elIndex) {
             if (rf & 1) {
