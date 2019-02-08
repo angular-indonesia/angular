@@ -1,6 +1,6 @@
 {
   "name": "angular-srcs",
-  "version": "8.0.0-beta.2",
+  "version": "8.0.0-beta.3",
   "private": true,
   "branchPattern": "2.0.*",
   "description": "Angular - a web framework for modern web apps",
@@ -32,7 +32,7 @@
   "// 1": "dependencies are used locally and by bazel",
   "dependencies": {
     "@angular-devkit/architect": "^0.10.6",
-    "@angular-devkit/build-optimizer": "^0.12.2",
+    "@angular-devkit/build-optimizer": "0.13.0-rc.0",
     "@angular-devkit/core": "^7.0.4",
     "@angular-devkit/schematics": "^7.3.0-rc.0",
     "@bazel/karma": "0.23.2",
