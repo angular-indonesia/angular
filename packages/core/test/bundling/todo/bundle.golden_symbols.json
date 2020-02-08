@@ -48,6 +48,9 @@
     "name": "EMPTY_ARRAY"
   },
   {
+    "name": "EMPTY_ARRAY"
+  },
+  {
     "name": "EMPTY_OBJ"
   },
   {
@@ -564,9 +567,6 @@
     "name": "getCheckNoChangesMode"
   },
   {
-    "name": "getCleanup"
-  },
-  {
     "name": "getClosureSafeProperty"
   },
   {
@@ -625,6 +625,9 @@
   },
   {
     "name": "getIsParent"
+  },
+  {
+    "name": "getLCleanup"
   },
   {
     "name": "getLContainer"
@@ -721,6 +724,9 @@
   },
   {
     "name": "getTStylingRangePrevDuplicate"
+  },
+  {
+    "name": "getTView"
   },
   {
     "name": "getTViewCleanup"
