@@ -115,8 +115,10 @@ v16 - v19
 
 | Area                                | API or Feature                                                                                             | Deprecated in | May be removed in |
 |:---                                 |:---                                                                                                        |:---           |:---               |
+| `@angular/common` | `isPlatformWorkerApp` and `isPlatformWorkerUi` | v16 | v18 |
 | `@angular/core` | `EnvironmentInjector.runInContext` | v16 | v18 |
 | `@angular/platform-server`          | [`PlatformConfig.baseUrl` and `PlatformConfig.useAbsoluteUrl` config options](api/platform-server/PlatformConfig) | v16           | v18               |
+| `@angular/platform-server`          | [`platformDynamicServer`](api/platform-server/platformDynamicServer) | v16           | v18               |
 | `@angular/platform-browser`         | [`BrowserModule.withServerTransition`](api/platform-browser/BrowserModule#withservertransition)            | v16           | v18         |
 | `@angular/platform-browser`         | [`makeStateKey`, `StateKey` and `TransferState`](#platform-browser), symbols were moved to `@angular/core`                                        | v16           | v18         |
 
@@ -147,6 +149,7 @@ In the [API reference section](api) of this site, deprecated APIs are indicated 
 |:---                                                                                           |:---                                                 |:---                   |:---     |
 | [`NgComponentOutlet.ngComponentOutletNgModuleFactory`](api/common/NgComponentOutlet)          | `NgComponentOutlet.ngComponentOutletNgModule`       | v14                   | Use the `ngComponentOutletNgModule` input instead. This input doesn't require resolving NgModule factory. |
 | [`DatePipe` - `DATE_PIPE_DEFAULT_TIMEZONE`](api/common/DATE_PIPE_DEFAULT_TIMEZONE) |`{ provide: DATE_PIPE_DEFAULT_OPTIONS, useValue: { timezone: '-1200' }` | v15                    | Use the `DATE_PIPE_DEFAULT_OPTIONS` injection token, which can configure multiple settings at once instead. |
+| `isPlatformWorkerApp` and `isPlatformWorkerUi` | None  | v16 | These two functions have no purpose since the removal of the webworker platform (they only return `false`). They can be safely removed.
 
 <a id="core"></a>
 
@@ -223,6 +226,9 @@ In the [API reference section](api) of this site, deprecated APIs are indicated 
 |:---                                                              |:---                                                |:---                   |:---     |
 | [`ServerTransferStateModule`](api/platform-server/ServerTransferStateModule) | No replacement needed.  | v14.1                   | The `TransferState` class is available for injection without importing additional modules during server side rendering, when `ServerModule` is imported or `renderApplication` function is used for bootstrap. |
 | [`PlatformConfig.baseUrl` and `PlatformConfig.useAbsoluteUrl` config options](api/platform-server/PlatformConfig) | none                    | v16                   | This was previously unused.                   |
+| [`platformDynamicServer`](api/platform-server/platformDynamicServer) | Import `@angular/compiler` and replace the usage with `platformServer` instead. | v16                   | This is done to decrease the server bundle size for AOT builds.                   |
+
+
 <a id="forms"></a>
 
 ### &commat;angular/forms
