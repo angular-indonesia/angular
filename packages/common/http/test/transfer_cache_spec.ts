@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.dev/license
  */
 
-import {DOCUMENT} from '@angular/common';
+import {DOCUMENT} from '../../index';
 import {ApplicationRef, Component, Injectable, PLATFORM_ID} from '@angular/core';
 import {makeStateKey, TransferState} from '@angular/core/src/transfer_state';
 import {fakeAsync, flush, TestBed} from '@angular/core/testing';
@@ -88,6 +88,14 @@ describe('TransferCache', () => {
       return response;
     }
 
+    beforeEach(() => {
+      globalThis['ngServerMode'] = true;
+    });
+
+    afterEach(() => {
+      globalThis['ngServerMode'] = undefined;
+    });
+
     beforeEach(
       withBody('<test-app-http></test-app-http>', () => {
         TestBed.resetTestingModule();
@@ -95,7 +103,9 @@ describe('TransferCache', () => {
 
         @Injectable()
         class ApplicationRefPatched extends ApplicationRef {
-          override isStable = new BehaviorSubject<boolean>(false);
+          override get isStable() {
+            return isStable;
+          }
         }
 
         TestBed.configureTestingModule({
@@ -112,7 +122,6 @@ describe('TransferCache', () => {
 
         const appRef = TestBed.inject(ApplicationRef);
         appRef.bootstrap(SomeComponent);
-        isStable = appRef.isStable as BehaviorSubject<boolean>;
       }),
     );
 
@@ -323,6 +332,14 @@ describe('TransferCache', () => {
     });
 
     describe('caching in browser context', () => {
+      beforeEach(() => {
+        globalThis['ngServerMode'] = false;
+      });
+
+      afterEach(() => {
+        globalThis['ngServerMode'] = undefined;
+      });
+
       beforeEach(
         withBody('<test-app-http></test-app-http>', () => {
           TestBed.resetTestingModule();
@@ -330,7 +347,9 @@ describe('TransferCache', () => {
 
           @Injectable()
           class ApplicationRefPatched extends ApplicationRef {
-            override isStable = new BehaviorSubject<boolean>(false);
+            override get isStable() {
+              return new BehaviorSubject<boolean>(false);
+            }
           }
 
           TestBed.configureTestingModule({
@@ -365,7 +384,9 @@ describe('TransferCache', () => {
 
           @Injectable()
           class ApplicationRefPatched extends ApplicationRef {
-            override isStable = new BehaviorSubject<boolean>(false);
+            override get isStable() {
+              return new BehaviorSubject<boolean>(false);
+            }
           }
 
           TestBed.configureTestingModule({
@@ -463,7 +484,9 @@ describe('TransferCache', () => {
 
           @Injectable()
           class ApplicationRefPatched extends ApplicationRef {
-            override isStable = new BehaviorSubject<boolean>(false);
+            override get isStable() {
+              return new BehaviorSubject<boolean>(false);
+            }
           }
 
           TestBed.configureTestingModule({
@@ -511,7 +534,9 @@ describe('TransferCache', () => {
 
             @Injectable()
             class ApplicationRefPatched extends ApplicationRef {
-              override isStable = new BehaviorSubject<boolean>(false);
+              override get isStable() {
+                return new BehaviorSubject<boolean>(false);
+              }
             }
 
             TestBed.configureTestingModule({
@@ -561,7 +586,9 @@ describe('TransferCache', () => {
 
             @Injectable()
             class ApplicationRefPatched extends ApplicationRef {
-              override isStable = new BehaviorSubject<boolean>(false);
+              override get isStable() {
+                return new BehaviorSubject<boolean>(false);
+              }
             }
 
             TestBed.configureTestingModule({

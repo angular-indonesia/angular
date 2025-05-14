@@ -40,10 +40,11 @@ import {
   TransferState,
   Type,
   ViewEncapsulation,
-  ɵPendingTasksInternal as PendingTasks,
+  PendingTasks,
   APP_INITIALIZER,
   inject,
   getPlatform,
+  provideNgReflectAttributes,
 } from '@angular/core';
 import {SSR_CONTENT_INTEGRITY_MARKER} from '@angular/core/src/hydration/utils';
 import {TestBed} from '@angular/core/testing';
@@ -61,11 +62,12 @@ import {
   provideServerRendering,
   renderModule,
   ServerModule,
-} from '@angular/platform-server';
+} from '../index';
 import {provideRouter, RouterOutlet, Routes} from '@angular/router';
 import {Observable} from 'rxjs';
 
 import {renderApplication, SERVER_CONTEXT} from '../src/utils';
+import {BrowserAnimationsModule, provideAnimations} from '@angular/platform-browser/animations';
 
 const APP_CONFIG: ApplicationConfig = {
   providers: [provideServerRendering()],
@@ -75,7 +77,11 @@ function getStandaloneBootstrapFn(
   component: Type<unknown>,
   providers: Array<Provider | EnvironmentProviders> = [],
 ): () => Promise<ApplicationRef> {
-  return () => bootstrapApplication(component, mergeApplicationConfig(APP_CONFIG, {providers}));
+  return () =>
+    bootstrapApplication(
+      component,
+      mergeApplicationConfig(APP_CONFIG, {providers: [...providers, provideNgReflectAttributes()]}),
+    );
 }
 
 function createMyServerApp(standalone: boolean) {
@@ -109,9 +115,9 @@ function createAppWithPendingTask(standalone: boolean) {
 
     constructor() {
       const pendingTasks = coreInject(PendingTasks);
-      const taskId = pendingTasks.add();
+      const removeTask = pendingTasks.add();
       setTimeout(() => {
-        pendingTasks.remove(taskId);
+        removeTask();
         this.completed = 'Yes';
       });
     }
@@ -390,11 +396,13 @@ function createMyAnimationApp(standalone: boolean) {
 }
 
 const MyAnimationApp = createMyAnimationApp(false);
-const MyAnimationAppStandalone = getStandaloneBootstrapFn(createMyAnimationApp(true));
+const MyAnimationAppStandalone = getStandaloneBootstrapFn(createMyAnimationApp(true), [
+  provideAnimations(),
+]);
 
 @NgModule({
   declarations: [MyAnimationApp],
-  imports: [BrowserModule, ServerModule],
+  imports: [BrowserModule, BrowserAnimationsModule, ServerModule],
   bootstrap: [MyAnimationApp],
 })
 class AnimationServerModule {}
@@ -555,6 +563,7 @@ const MyHostComponentStandalone = getStandaloneBootstrapFn(
   declarations: [MyHostComponent, MyChildComponent],
   bootstrap: [MyHostComponent],
   imports: [ServerModule, BrowserModule],
+  providers: [provideNgReflectAttributes()],
 })
 class FalseAttributesModule {}
 
@@ -973,7 +982,7 @@ class HiddenModule {}
               });
           const output = await bootstrap;
           expect(output).toMatch(
-            /<app _nghost-ng-c\d+="" ng-version="0.0.0-PLACEHOLDER" ng-server-context="ssg">/,
+            /<app ng-version="0.0.0-PLACEHOLDER" _nghost-ng-c\d+="" ng-server-context="ssg">/,
           );
         });
 
